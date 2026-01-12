@@ -12,6 +12,17 @@ import time
 from config.settings import settings
 from config.version import get_version, get_version_display, CHANGELOG
 
+# Import-Service fuer echte PDF/ZIP-Verarbeitung
+from src.services.import_service import (
+    importiere_pdf,
+    importiere_zip,
+    extrahiere_lesezeichen_aus_pdf,
+    teile_pdf_nach_lesezeichen,
+    ist_pdf_verfuegbar,
+    ist_pdfplumber_verfuegbar,
+    get_pdf_seitenanzahl
+)
+
 # Seitenkonfiguration muss zuerst kommen
 st.set_page_config(
     page_title="FamilyKom - Familienrecht",
@@ -1584,48 +1595,66 @@ def show_lawyer_dashboard():
 
                 if st.button("RA-MICRO Import starten", type="primary", key="start_ra_micro"):
                     with st.spinner("Analysiere Import-Datei..."):
-                        time.sleep(2)
+                        # Echte Import-Verarbeitung
+                        dateiname = ra_micro_file.name.lower()
 
-                    # HINWEIS: Dies sind Demo-Daten zur Veranschaulichung des Workflows.
-                    # In der Produktionsversion werden hier die tatsaechlichen Daten aus
-                    # dem PDF (Lesezeichen, OCR-Text) extrahiert und analysiert.
-                    st.session_state.import_result = {
-                        "quelle": "RA-MICRO",
-                        "hinweis_demo": True,  # Markiert als Demo-Daten
-                        "akten": [
-                            {
-                                "az": "2025/0847",
-                                "mandant": "Schmidt, Maria",
-                                "gegner": "Schmidt, Thomas",
-                                "typ": "Scheidung",
-                                "angelegt": "15.03.2025",
-                                "dokumente": 12,
-                                "status": "erkannt"
-                            },
-                            {
-                                "az": "2025/0923",
-                                "mandant": "Mueller, Hans",
-                                "gegner": "Mueller, Sabine",
-                                "typ": "Kindesunterhalt",
-                                "angelegt": "22.05.2025",
-                                "dokumente": 8,
-                                "status": "erkannt"
-                            },
-                            {
-                                "az": "2026/0012",
-                                "mandant": "Weber, Petra",
-                                "gegner": "Weber, Klaus",
-                                "typ": "Zugewinn",
-                                "angelegt": "08.01.2026",
-                                "dokumente": 15,
-                                "status": "erkannt"
-                            },
-                        ],
-                        "dokumente_ohne_akte": [
-                            {"name": "Schriftsatz_AG_Rendsburg.pdf", "seiten": 5, "datum": "10.01.2026"},
-                            {"name": "Anlage_Kontoauszuege.pdf", "seiten": 12, "datum": "10.01.2026"},
-                        ]
-                    }
+                        # Pruefen ob PDF-Bibliotheken verfuegbar sind
+                        if not ist_pdf_verfuegbar():
+                            st.error("PDF-Verarbeitung nicht verfuegbar. Bitte installieren Sie: pip install pypdf pdfplumber")
+                            st.stop()
+
+                        try:
+                            if dateiname.endswith('.pdf'):
+                                # PDF-Import mit echter Lesezeichen-Extraktion
+                                import_ergebnis = importiere_pdf(ra_micro_file, ra_micro_file.name)
+                            elif dateiname.endswith('.zip'):
+                                # ZIP-Import mit Extraktion
+                                import_ergebnis = importiere_zip(ra_micro_file, ra_micro_file.name)
+                            else:
+                                st.warning(f"Dateityp {dateiname.split('.')[-1]} wird noch nicht unterstuetzt. Bitte verwenden Sie PDF oder ZIP.")
+                                st.stop()
+
+                            # Ergebnis aufbereiten
+                            akten_liste = []
+                            for akte in import_ergebnis.akten:
+                                akten_liste.append({
+                                    "az": akte.aktenzeichen,
+                                    "mandant": akte.mandant,
+                                    "gegner": akte.gegner,
+                                    "typ": akte.typ,
+                                    "angelegt": akte.angelegt,
+                                    "dokumente": akte.dokument_count,
+                                    "status": "erkannt"
+                                })
+
+                            dokumente_ohne_akte = []
+                            for dok in import_ergebnis.dokumente_ohne_akte:
+                                dokumente_ohne_akte.append({
+                                    "name": dok.get("name", "Unbekannt"),
+                                    "seiten": dok.get("seiten", 0),
+                                    "datum": datetime.now().strftime("%d.%m.%Y")
+                                })
+
+                            st.session_state.import_result = {
+                                "quelle": "RA-MICRO",
+                                "hinweis_demo": False,  # Echte Daten!
+                                "akten": akten_liste,
+                                "dokumente_ohne_akte": dokumente_ohne_akte,
+                                "lesezeichen": import_ergebnis.lesezeichen,
+                                "hinweise": import_ergebnis.hinweise,
+                                "fehler": import_ergebnis.fehler
+                            }
+
+                        except Exception as e:
+                            st.error(f"Fehler beim Import: {str(e)}")
+                            st.session_state.import_result = {
+                                "quelle": "RA-MICRO",
+                                "hinweis_demo": False,
+                                "akten": [],
+                                "dokumente_ohne_akte": [],
+                                "fehler": [str(e)]
+                            }
+
                     st.session_state.show_import_result = True
                     st.rerun()
 
@@ -1636,7 +1665,7 @@ def show_lawyer_dashboard():
                     st.markdown("---")
                     st.markdown("### Import-Ergebnis")
 
-                    # Demo-Hinweis anzeigen
+                    # Demo-Hinweis anzeigen (nur wenn wirklich Demo-Daten)
                     if result.get("hinweis_demo"):
                         st.warning("""
                         **DEMO-MODUS:** Die unten angezeigten Daten sind Beispieldaten zur Veranschaulichung
@@ -1644,7 +1673,23 @@ def show_lawyer_dashboard():
                         aus den PDF-Lesezeichen und per OCR extrahiert.
                         """)
 
-                    st.success(f"**{len(result['akten'])} Akte(n)** und **{sum(a['dokumente'] for a in result['akten'])} Dokumente** erkannt!")
+                    # Hinweise aus dem Import anzeigen
+                    if result.get("hinweise"):
+                        with st.expander("Import-Hinweise", expanded=True):
+                            for hinweis in result["hinweise"]:
+                                st.info(hinweis)
+
+                    # Fehler aus dem Import anzeigen
+                    if result.get("fehler"):
+                        with st.expander("Import-Fehler", expanded=True):
+                            for fehler in result["fehler"]:
+                                st.error(fehler)
+
+                    # Zusammenfassung
+                    if result['akten']:
+                        st.success(f"**{len(result['akten'])} Akte(n)** und **{sum(a['dokumente'] for a in result['akten'])} Dokumente** erkannt!")
+                    else:
+                        st.warning("Keine Akten erkannt. Bitte pruefen Sie die Hinweise oben.")
 
                     # Erkannte Akten anzeigen
                     st.markdown("#### Erkannte Akten")
@@ -1771,9 +1816,106 @@ def show_lawyer_dashboard():
                 st.info(f"{len(zip_files)} Datei(en) ausgewaehlt")
 
                 if st.button("ZIP-Import starten", type="primary", key="start_zip"):
-                    with st.spinner("Verarbeite ZIP-Dateien..."):
-                        time.sleep(2)
-                    st.success("ZIP-Import abgeschlossen!")
+                    alle_akten = []
+                    alle_dokumente_ohne_akte = []
+                    alle_hinweise = []
+                    alle_fehler = []
+
+                    progress = st.progress(0)
+                    status = st.empty()
+
+                    for i, zip_file in enumerate(zip_files):
+                        status.text(f"Verarbeite: {zip_file.name}")
+                        progress.progress((i + 1) / len(zip_files))
+
+                        try:
+                            import_ergebnis = importiere_zip(zip_file, zip_file.name)
+
+                            for akte in import_ergebnis.akten:
+                                alle_akten.append({
+                                    "az": akte.aktenzeichen,
+                                    "mandant": akte.mandant,
+                                    "gegner": akte.gegner,
+                                    "typ": akte.typ,
+                                    "angelegt": akte.angelegt,
+                                    "dokumente": akte.dokument_count,
+                                    "status": "erkannt"
+                                })
+
+                            for dok in import_ergebnis.dokumente_ohne_akte:
+                                alle_dokumente_ohne_akte.append({
+                                    "name": dok.get("name", "Unbekannt"),
+                                    "seiten": dok.get("seiten", 0),
+                                    "datum": datetime.now().strftime("%d.%m.%Y")
+                                })
+
+                            alle_hinweise.extend(import_ergebnis.hinweise)
+                            alle_fehler.extend(import_ergebnis.fehler)
+
+                        except Exception as e:
+                            alle_fehler.append(f"Fehler bei {zip_file.name}: {str(e)}")
+
+                    st.session_state.import_result = {
+                        "quelle": "ZIP",
+                        "hinweis_demo": False,
+                        "akten": alle_akten,
+                        "dokumente_ohne_akte": alle_dokumente_ohne_akte,
+                        "hinweise": alle_hinweise,
+                        "fehler": alle_fehler
+                    }
+                    st.session_state.show_import_result = True
+
+                    if alle_akten:
+                        st.success(f"ZIP-Import abgeschlossen! {len(alle_akten)} Akte(n) erkannt.")
+                    elif alle_hinweise:
+                        st.info("Import abgeschlossen. Siehe Hinweise unten.")
+                    else:
+                        st.warning("Keine Akten im ZIP gefunden.")
+
+                # ZIP Import-Ergebnis anzeigen
+                if st.session_state.get("show_import_result") and st.session_state.get("import_result", {}).get("quelle") == "ZIP":
+                    result = st.session_state.import_result
+                    st.markdown("---")
+
+                    if result.get("hinweise"):
+                        with st.expander("Import-Hinweise", expanded=True):
+                            for hinweis in result["hinweise"]:
+                                st.info(hinweis)
+
+                    if result.get("fehler"):
+                        with st.expander("Import-Fehler", expanded=True):
+                            for fehler in result["fehler"]:
+                                st.error(fehler)
+
+                    if result["akten"]:
+                        st.markdown("#### Erkannte Akten aus ZIP")
+                        for idx, akte in enumerate(result["akten"]):
+                            st.write(f"- **{akte['az']}** - {akte['mandant']} ./. {akte['gegner']} ({akte['typ']})")
+
+                        if st.button("Akten aus ZIP importieren", type="primary", key="confirm_zip_import"):
+                            if "akten_liste" not in st.session_state:
+                                st.session_state.akten_liste = []
+
+                            for akte in result["akten"]:
+                                neue_akte = {
+                                    "az": akte["az"],
+                                    "mandant": akte["mandant"],
+                                    "gegner": akte["gegner"],
+                                    "typ": akte["typ"],
+                                    "status": "Aktiv",
+                                    "angelegt": akte["angelegt"],
+                                    "quelle": "ZIP Import"
+                                }
+                                existing_az = [a["az"] for a in st.session_state.akten_liste]
+                                if akte["az"] not in existing_az:
+                                    st.session_state.akten_liste.append(neue_akte)
+
+                            st.session_state.show_import_result = False
+                            st.session_state.import_result = None
+                            st.success("Import abgeschlossen!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
 
         with import_col2:
             st.markdown("#### Import aus Cloud-Ordnern")
@@ -2048,81 +2190,101 @@ def show_lawyer_dashboard():
             )
 
             if bookmark_file:
-                st.info(f"Datei: {bookmark_file.name}")
+                st.info(f"Datei: {bookmark_file.name} ({bookmark_file.size / 1024:.1f} KB)")
 
-                if st.button("Lesezeichen auslesen", key="detect_bookmarks"):
-                    with st.spinner("Lese PDF-Lesezeichen aus..."):
-                        time.sleep(1)
+                # Pruefen ob PDF-Bibliothek verfuegbar
+                if not ist_pdf_verfuegbar():
+                    st.error("PDF-Verarbeitung nicht verfuegbar. Bitte installieren Sie: pip install pypdf")
+                else:
+                    if st.button("Lesezeichen auslesen", key="detect_bookmarks"):
+                        with st.spinner("Lese PDF-Lesezeichen aus..."):
+                            # Echte Lesezeichen-Extraktion
+                            lesezeichen_objekte = extrahiere_lesezeichen_aus_pdf(bookmark_file)
 
-                    st.success("Lesezeichen gefunden!")
+                        if lesezeichen_objekte:
+                            st.success(f"{len(lesezeichen_objekte)} Lesezeichen gefunden!")
 
-                    # Demo-Lesezeichen (wie sie typischerweise in RA-MICRO oder Gerichtsakten vorkommen)
-                    st.markdown("**Gefundene Lesezeichen:**")
-                    lesezeichen = [
-                        {"ebene": 1, "titel": "Schriftsatz vom 15.12.2025", "seite": 1},
-                        {"ebene": 2, "titel": "Antraege", "seite": 1},
-                        {"ebene": 2, "titel": "Sachverhalt", "seite": 3},
-                        {"ebene": 2, "titel": "Begruendung", "seite": 5},
-                        {"ebene": 1, "titel": "Anlage 1 - Heiratsurkunde", "seite": 12},
-                        {"ebene": 1, "titel": "Anlage 2 - Geburtsurkunden", "seite": 13},
-                        {"ebene": 1, "titel": "Anlage 3 - Einkommensnachweise", "seite": 16},
-                        {"ebene": 2, "titel": "Gehaltsabrechnung Dez 2025", "seite": 16},
-                        {"ebene": 2, "titel": "Gehaltsabrechnung Nov 2025", "seite": 17},
-                        {"ebene": 2, "titel": "Gehaltsabrechnung Okt 2025", "seite": 18},
-                        {"ebene": 1, "titel": "Anlage 4 - Steuerbescheid", "seite": 19},
-                    ]
+                            # In Session State speichern fuer spaetere Verarbeitung
+                            st.session_state.bookmark_lesezeichen = lesezeichen_objekte
+                            st.session_state.bookmark_file_name = bookmark_file.name
 
-                    # Lesezeichen mit Einrueckung anzeigen
-                    for lz in lesezeichen:
-                        einrueckung = "    " * (lz["ebene"] - 1)
-                        checkbox_key = f"lz_{lz['seite']}_{lz['titel'][:10]}"
-                        st.checkbox(
-                            f"{einrueckung}{lz['titel']} (S. {lz['seite']})",
-                            value=lz["ebene"] == 1,  # Nur Hauptebene standardmaessig ausgewaehlt
-                            key=checkbox_key
-                        )
+                            # Lesezeichen als Liste von Dicts konvertieren fuer Anzeige
+                            def flatten_lesezeichen(lz_liste, ebene=1):
+                                result = []
+                                for lz in lz_liste:
+                                    result.append({"ebene": ebene, "titel": lz.titel, "seite": lz.seite})
+                                    if lz.kinder:
+                                        result.extend(flatten_lesezeichen(lz.kinder, ebene + 1))
+                                return result
 
-                    st.markdown("---")
+                            lesezeichen_flat = flatten_lesezeichen(lesezeichen_objekte)
 
-                    aufteilung_option = st.selectbox(
-                        "Aufteilungsebene",
-                        [
-                            "Nur Hauptlesezeichen (Ebene 1)",
-                            "Alle Lesezeichen",
-                            "Nur ausgewaehlte Lesezeichen"
-                        ],
-                        key="bookmark_level"
-                    )
+                            st.markdown("**Gefundene Lesezeichen:**")
+                            for lz in lesezeichen_flat:
+                                einrueckung = "    " * (lz["ebene"] - 1)
+                                safe_key = f"lz_{lz['seite']}_{hash(lz['titel'])}"
+                                st.checkbox(
+                                    f"{einrueckung}{lz['titel']} (S. {lz['seite']})",
+                                    value=lz["ebene"] == 1,
+                                    key=safe_key
+                                )
 
-                    zusammenfuehren = st.checkbox(
-                        "Untergeordnete Lesezeichen zum Hauptlesezeichen zusammenfuehren",
-                        value=True,
-                        key="merge_bookmarks",
-                        help="z.B. alle Gehaltsabrechnungen werden zu einem Dokument 'Einkommensnachweise' zusammengefasst"
-                    )
+                            st.markdown("---")
 
-                    if st.button("Nach Lesezeichen aufteilen", type="primary", key="split_by_bookmarks"):
-                        with st.spinner("Teile PDF nach Lesezeichen auf..."):
-                            time.sleep(2)
-                        st.success("""
-                        PDF wurde erfolgreich aufgeteilt!
+                            aufteilung_option = st.selectbox(
+                                "Aufteilungsebene",
+                                [
+                                    "Nur Hauptlesezeichen (Ebene 1)",
+                                    "Alle Lesezeichen",
+                                ],
+                                key="bookmark_level"
+                            )
 
-                        - 7 Einzeldokumente erstellt
-                        - Dateinamen aus Lesezeichen uebernommen
-                        - Bereit zur Aktenzuordnung
-                        """)
+                            if st.button("Nach Lesezeichen aufteilen", type="primary", key="split_by_bookmarks"):
+                                with st.spinner("Teile PDF nach Lesezeichen auf..."):
+                                    # Datei-Position zuruecksetzen
+                                    bookmark_file.seek(0)
 
-                        # Ergebnis-Vorschau
-                        st.markdown("**Erstellte Dokumente:**")
-                        erstellte_docs = [
-                            "Schriftsatz_vom_15.12.2025.pdf (S. 1-11)",
-                            "Anlage_1_Heiratsurkunde.pdf (S. 12)",
-                            "Anlage_2_Geburtsurkunden.pdf (S. 13-15)",
-                            "Anlage_3_Einkommensnachweise.pdf (S. 16-18)",
-                            "Anlage_4_Steuerbescheid.pdf (S. 19-22)",
-                        ]
-                        for doc in erstellte_docs:
-                            st.write(f"- {doc}")
+                                    # Echte PDF-Teilung
+                                    nur_hauptebene = aufteilung_option == "Nur Hauptlesezeichen (Ebene 1)"
+                                    erstellte_dokumente = teile_pdf_nach_lesezeichen(
+                                        bookmark_file,
+                                        lesezeichen_objekte,
+                                        nur_hauptebene=nur_hauptebene
+                                    )
+
+                                if erstellte_dokumente:
+                                    st.success(f"""
+                                    PDF wurde erfolgreich aufgeteilt!
+
+                                    - **{len(erstellte_dokumente)} Einzeldokumente** erstellt
+                                    - Dateinamen aus Lesezeichen uebernommen
+                                    - Bereit zur Aktenzuordnung
+                                    """)
+
+                                    # Ergebnis-Vorschau
+                                    st.markdown("**Erstellte Dokumente:**")
+                                    for doc in erstellte_dokumente:
+                                        st.write(f"- {doc.name} (S. {doc.start_seite}-{doc.end_seite}, {doc.seitenanzahl} Seiten)")
+
+                                    # In Session State speichern fuer Download
+                                    st.session_state.split_documents = erstellte_dokumente
+
+                                    # Download-Buttons
+                                    st.markdown("**Downloads:**")
+                                    for idx, doc in enumerate(erstellte_dokumente):
+                                        if doc.pdf_bytes:
+                                            st.download_button(
+                                                label=f"Download: {doc.name}",
+                                                data=doc.pdf_bytes,
+                                                file_name=doc.name,
+                                                mime="application/pdf",
+                                                key=f"download_split_{idx}"
+                                            )
+                                else:
+                                    st.warning("Keine Dokumente konnten erstellt werden.")
+                        else:
+                            st.warning("Keine Lesezeichen im PDF gefunden. Dieses PDF enthaelt keine Bookmarks.")
 
             st.markdown("---")
 
