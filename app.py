@@ -7,6 +7,7 @@ Fuer RHM - Radtke, Heigener und Meier Kanzlei, Rendsburg
 
 import streamlit as st
 from datetime import datetime, date
+import time
 
 from config.settings import settings
 from config.version import get_version, get_version_display, CHANGELOG
@@ -1583,12 +1584,14 @@ def show_lawyer_dashboard():
 
                 if st.button("RA-MICRO Import starten", type="primary", key="start_ra_micro"):
                     with st.spinner("Analysiere Import-Datei..."):
-                        import time
                         time.sleep(2)
 
-                    # Erkannte Daten aus dem Import speichern
+                    # HINWEIS: Dies sind Demo-Daten zur Veranschaulichung des Workflows.
+                    # In der Produktionsversion werden hier die tatsaechlichen Daten aus
+                    # dem PDF (Lesezeichen, OCR-Text) extrahiert und analysiert.
                     st.session_state.import_result = {
                         "quelle": "RA-MICRO",
+                        "hinweis_demo": True,  # Markiert als Demo-Daten
                         "akten": [
                             {
                                 "az": "2025/0847",
@@ -1632,6 +1635,15 @@ def show_lawyer_dashboard():
 
                     st.markdown("---")
                     st.markdown("### Import-Ergebnis")
+
+                    # Demo-Hinweis anzeigen
+                    if result.get("hinweis_demo"):
+                        st.warning("""
+                        **DEMO-MODUS:** Die unten angezeigten Daten sind Beispieldaten zur Veranschaulichung
+                        des Import-Workflows. In der Produktionsversion werden die tatsaechlichen Daten
+                        aus den PDF-Lesezeichen und per OCR extrahiert.
+                        """)
+
                     st.success(f"**{len(result['akten'])} Akte(n)** und **{sum(a['dokumente'] for a in result['akten'])} Dokumente** erkannt!")
 
                     # Erkannte Akten anzeigen
@@ -1742,27 +1754,26 @@ def show_lawyer_dashboard():
 
             st.markdown("---")
 
-            st.markdown("#### Import aus SIP-Dateien")
+            st.markdown("#### Import aus ZIP-Archiven")
             st.markdown("""
-            SIP (Submission Information Package) Dateien aus
-            Gerichtsakten oder anderen Quellen importieren.
+            Importieren Sie ZIP-Archive mit Akten und Dokumenten.
+            Das System erkennt die Struktur und ordnet Dokumente zu.
             """)
 
-            sip_files = st.file_uploader(
-                "SIP-Dateien hochladen",
-                type=["sip", "zip", "tar"],
+            zip_files = st.file_uploader(
+                "ZIP-Dateien hochladen",
+                type=["zip", "rar", "7z"],
                 accept_multiple_files=True,
-                key="sip_import"
+                key="zip_import"
             )
 
-            if sip_files:
-                st.info(f"{len(sip_files)} Datei(en) ausgewaehlt")
+            if zip_files:
+                st.info(f"{len(zip_files)} Datei(en) ausgewaehlt")
 
-                if st.button("SIP-Import starten", type="primary", key="start_sip"):
-                    with st.spinner("Verarbeite SIP-Dateien..."):
-                        import time
+                if st.button("ZIP-Import starten", type="primary", key="start_zip"):
+                    with st.spinner("Verarbeite ZIP-Dateien..."):
                         time.sleep(2)
-                    st.success("SIP-Import abgeschlossen!")
+                    st.success("ZIP-Import abgeschlossen!")
 
         with import_col2:
             st.markdown("#### Import aus Cloud-Ordnern")
@@ -1804,13 +1815,11 @@ def show_lawyer_dashboard():
                 with col_a:
                     if st.button("Verbindung testen", use_container_width=True, key="test_cloud"):
                         with st.spinner("Teste Verbindung..."):
-                            import time
                             time.sleep(1)
                         st.success("Verbindung erfolgreich!")
                 with col_b:
                     if st.button("Cloud-Import starten", type="primary", use_container_width=True, key="start_cloud"):
                         with st.spinner("Importiere aus Cloud..."):
-                            import time
                             time.sleep(2)
                         st.success("23 Dokumente aus Cloud importiert!")
 
@@ -1848,7 +1857,6 @@ def show_lawyer_dashboard():
 
                 if st.button("Dokumente analysieren", type="primary", key="start_mass"):
                     with st.spinner("Analysiere Dokumente..."):
-                        import time
                         time.sleep(2)
 
                     # Erkannte Zuordnungen simulieren
@@ -1999,7 +2007,6 @@ def show_lawyer_dashboard():
 
                 if st.button("Dokument analysieren und trennen", type="primary", key="start_split"):
                     with st.spinner("Analysiere Dokument..."):
-                        import time
                         time.sleep(2)
 
                     st.success("Analyse abgeschlossen!")
@@ -2045,7 +2052,6 @@ def show_lawyer_dashboard():
 
                 if st.button("Lesezeichen auslesen", key="detect_bookmarks"):
                     with st.spinner("Lese PDF-Lesezeichen aus..."):
-                        import time
                         time.sleep(1)
 
                     st.success("Lesezeichen gefunden!")
@@ -2097,7 +2103,6 @@ def show_lawyer_dashboard():
 
                     if st.button("Nach Lesezeichen aufteilen", type="primary", key="split_by_bookmarks"):
                         with st.spinner("Teile PDF nach Lesezeichen auf..."):
-                            import time
                             time.sleep(2)
                         st.success("""
                         PDF wurde erfolgreich aufgeteilt!
@@ -2162,7 +2167,6 @@ def show_lawyer_dashboard():
                     for i, file in enumerate(ocr_files):
                         status.text(f"Verarbeite: {file.name}")
                         progress.progress((i + 1) / len(ocr_files))
-                        import time
                         time.sleep(0.5)
 
                     st.success(f"OCR fuer {len(ocr_files)} Dokumente abgeschlossen!")
