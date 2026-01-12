@@ -156,15 +156,48 @@ Berechnung nach der **Düsseldorfer Tabelle 2025**:
 - Scheidungsverfahren mit Folgesachen
 - Außergerichtliche und gerichtliche Vertretung
 
-## Demo-Zugänge
+## Demo-Zugaenge
 
-Für Entwicklung und Tests:
+### Schnellzugang (Demo-Buttons)
 
-| Rolle | E-Mail | Passwort |
-|-------|--------|----------|
-| Anwalt | demo@rhm-kanzlei.de | demo |
-| Admin | admin@rhm-kanzlei.de | admin |
-| Mandant | - | DEMO123456 (Zugangscode) |
+Auf der Login-Seite koennen Sie mit einem Klick als Demo-Benutzer einloggen:
+
+- **Als Anwalt** - Zugang als Rechtsanwalt Dr. Thomas Mueller
+- **Als Mitarbeiter** - Zugang als Kanzleimitarbeiterin Sandra Schmidt
+- **Als Mandant** - Zugang als Mandant Max Mustermann
+- **Als Administrator** - Zugang zum Admin-Dashboard
+
+### Manuelle Anmeldung
+
+**Anwaelte:**
+
+| E-Mail | Passwort |
+|--------|----------|
+| ra.mueller@rhm-kanzlei.de | anwalt123 |
+| ra.radtke@rhm-kanzlei.de | anwalt123 |
+| ra.heigener@rhm-kanzlei.de | anwalt123 |
+| ra.meier@rhm-kanzlei.de | anwalt123 |
+
+**Mitarbeiter:**
+
+| E-Mail | Passwort |
+|--------|----------|
+| sekretariat@rhm-kanzlei.de | mitarbeiter123 |
+| buchhaltung@rhm-kanzlei.de | mitarbeiter123 |
+
+**Administrator:**
+
+| E-Mail | Passwort |
+|--------|----------|
+| admin@rhm-kanzlei.de | admin123 |
+
+**Mandanten (Zugangscodes):**
+
+| Mandant | Zugangscode |
+|---------|-------------|
+| Max Mustermann | MUSTERMANN2026 |
+| Lisa Schmidt | SCHMIDT2026 |
+| Demo-Mandant | DEMO123456 |
 
 ## Rechtliche Grundlagen
 
