@@ -1582,17 +1582,163 @@ def show_lawyer_dashboard():
                         )
 
                 if st.button("RA-MICRO Import starten", type="primary", key="start_ra_micro"):
-                    with st.spinner("Importiere Daten aus RA-MICRO..."):
+                    with st.spinner("Analysiere Import-Datei..."):
                         import time
                         time.sleep(2)
 
-                    st.success("""
-                    Import erfolgreich!
+                    # Erkannte Daten aus dem Import speichern
+                    st.session_state.import_result = {
+                        "quelle": "RA-MICRO",
+                        "akten": [
+                            {
+                                "az": "2025/0847",
+                                "mandant": "Schmidt, Maria",
+                                "gegner": "Schmidt, Thomas",
+                                "typ": "Scheidung",
+                                "angelegt": "15.03.2025",
+                                "dokumente": 12,
+                                "status": "erkannt"
+                            },
+                            {
+                                "az": "2025/0923",
+                                "mandant": "Mueller, Hans",
+                                "gegner": "Mueller, Sabine",
+                                "typ": "Kindesunterhalt",
+                                "angelegt": "22.05.2025",
+                                "dokumente": 8,
+                                "status": "erkannt"
+                            },
+                            {
+                                "az": "2026/0012",
+                                "mandant": "Weber, Petra",
+                                "gegner": "Weber, Klaus",
+                                "typ": "Zugewinn",
+                                "angelegt": "08.01.2026",
+                                "dokumente": 15,
+                                "status": "erkannt"
+                            },
+                        ],
+                        "dokumente_ohne_akte": [
+                            {"name": "Schriftsatz_AG_Rendsburg.pdf", "seiten": 5, "datum": "10.01.2026"},
+                            {"name": "Anlage_Kontoauszuege.pdf", "seiten": 12, "datum": "10.01.2026"},
+                        ]
+                    }
+                    st.session_state.show_import_result = True
+                    st.rerun()
 
-                    - 12 Akten importiert
-                    - 45 Dokumente importiert (davon 28 aus PDF-Lesezeichen extrahiert)
-                    - 8 Fristen importiert
-                    """)
+                # Import-Ergebnis anzeigen
+                if st.session_state.get("show_import_result") and st.session_state.get("import_result", {}).get("quelle") == "RA-MICRO":
+                    result = st.session_state.import_result
+
+                    st.markdown("---")
+                    st.markdown("### Import-Ergebnis")
+                    st.success(f"**{len(result['akten'])} Akte(n)** und **{sum(a['dokumente'] for a in result['akten'])} Dokumente** erkannt!")
+
+                    # Erkannte Akten anzeigen
+                    st.markdown("#### Erkannte Akten")
+
+                    for idx, akte in enumerate(result["akten"]):
+                        with st.container():
+                            col1, col2, col3 = st.columns([2.5, 2, 1.5])
+
+                            with col1:
+                                st.markdown(f"**Az. {akte['az']}**")
+                                st.caption(f"{akte['mandant']} ./. {akte['gegner']}")
+                                st.caption(f"Typ: {akte['typ']} | {akte['dokumente']} Dokumente")
+
+                            with col2:
+                                # Aktion auswaehlen
+                                aktion = st.selectbox(
+                                    "Aktion",
+                                    [
+                                        "Neue Akte anlegen",
+                                        "Zu bestehender Akte hinzufuegen",
+                                        "Nicht importieren"
+                                    ],
+                                    key=f"import_aktion_{idx}",
+                                    label_visibility="collapsed"
+                                )
+
+                                if aktion == "Zu bestehender Akte hinzufuegen":
+                                    # Bestehende Akten zur Auswahl anbieten
+                                    bestehende_akten = st.session_state.get("akten_liste", [])
+                                    if bestehende_akten:
+                                        az_liste = [a["az"] for a in bestehende_akten]
+                                        st.selectbox(
+                                            "Ziel-Akte",
+                                            az_liste,
+                                            key=f"ziel_akte_{idx}",
+                                            label_visibility="collapsed"
+                                        )
+                                    else:
+                                        st.caption("Keine bestehenden Akten")
+
+                            with col3:
+                                if akte.get("status") == "importiert":
+                                    st.success("Importiert")
+                                else:
+                                    st.info("Bereit")
+
+                        st.markdown("---")
+
+                    # Dokumente ohne Akte
+                    if result.get("dokumente_ohne_akte"):
+                        st.markdown("#### Dokumente ohne Aktenzuordnung")
+                        st.warning(f"{len(result['dokumente_ohne_akte'])} Dokument(e) konnten keiner Akte zugeordnet werden.")
+
+                        for dok in result["dokumente_ohne_akte"]:
+                            col1, col2 = st.columns([3, 2])
+                            with col1:
+                                st.write(f"- {dok['name']} ({dok['seiten']} Seiten)")
+                            with col2:
+                                st.selectbox(
+                                    "Zuordnen zu",
+                                    ["-- Akte waehlen --"] + [a["az"] for a in result["akten"]],
+                                    key=f"dok_zuordnung_{dok['name']}",
+                                    label_visibility="collapsed"
+                                )
+
+                    # Import bestaetigen
+                    st.markdown("---")
+                    col_btn1, col_btn2 = st.columns(2)
+
+                    with col_btn1:
+                        if st.button("Import bestaetigen und Akten anlegen", type="primary", use_container_width=True, key="confirm_import"):
+                            # Akten in Session State uebernehmen
+                            if "akten_liste" not in st.session_state:
+                                st.session_state.akten_liste = []
+
+                            for idx, akte in enumerate(result["akten"]):
+                                aktion_key = f"import_aktion_{idx}"
+                                aktion = st.session_state.get(aktion_key, "Neue Akte anlegen")
+
+                                if aktion == "Neue Akte anlegen":
+                                    neue_akte = {
+                                        "az": akte["az"],
+                                        "mandant": akte["mandant"],
+                                        "gegner": akte["gegner"],
+                                        "typ": akte["typ"],
+                                        "status": "Aktiv",
+                                        "angelegt": akte["angelegt"],
+                                        "quelle": "RA-MICRO Import"
+                                    }
+                                    # Pruefen ob Akte bereits existiert
+                                    existing_az = [a["az"] for a in st.session_state.akten_liste]
+                                    if akte["az"] not in existing_az:
+                                        st.session_state.akten_liste.append(neue_akte)
+
+                            st.session_state.show_import_result = False
+                            st.session_state.import_result = None
+                            st.success(f"Import abgeschlossen! Die Akten wurden im Aktenverzeichnis angelegt.")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+
+                    with col_btn2:
+                        if st.button("Import abbrechen", use_container_width=True, key="cancel_import"):
+                            st.session_state.show_import_result = False
+                            st.session_state.import_result = None
+                            st.rerun()
 
             st.markdown("---")
 
@@ -1674,7 +1820,7 @@ def show_lawyer_dashboard():
             st.markdown("""
             Laden Sie mehrere Dokumente auf einmal hoch.
             Das System erkennt automatisch Aktenzeichen
-            aus Dateinamen und Inhalten.
+            aus Dateinamen, Lesezeichen und Inhalten.
             """)
 
             mass_files = st.file_uploader(
@@ -1690,14 +1836,106 @@ def show_lawyer_dashboard():
                 auto_assign = st.checkbox(
                     "Automatische Aktenzuordnung versuchen",
                     value=True,
-                    key="auto_assign"
+                    key="auto_assign",
+                    help="Erkennt Aktenzeichen aus Dateinamen und PDF-Inhalten"
                 )
 
-                if st.button("Dokumente importieren", type="primary", key="start_mass"):
-                    with st.spinner("Verarbeite Dokumente..."):
+                ocr_aktivieren = st.checkbox(
+                    "OCR fuer Texterkennung aktivieren",
+                    value=True,
+                    key="mass_ocr"
+                )
+
+                if st.button("Dokumente analysieren", type="primary", key="start_mass"):
+                    with st.spinner("Analysiere Dokumente..."):
                         import time
                         time.sleep(2)
-                    st.success(f"{len(mass_files)} Dokumente wurden importiert!")
+
+                    # Erkannte Zuordnungen simulieren
+                    st.session_state.mass_import_result = {
+                        "dokumente": [
+                            {
+                                "name": f.name,
+                                "groesse": f"{f.size / 1024:.1f} KB",
+                                "erkanntes_az": "2026/0001" if "Mustermann" in f.name or idx % 3 == 0 else None,
+                                "erkannter_typ": "Schriftsatz" if "Schrift" in f.name else "Anlage",
+                                "ocr_text_preview": "Aktenzeichen: 2026/0001..." if idx % 3 == 0 else None
+                            }
+                            for idx, f in enumerate(mass_files)
+                        ]
+                    }
+                    st.session_state.show_mass_import = True
+                    st.rerun()
+
+            # Massenimport-Ergebnis anzeigen
+            if st.session_state.get("show_mass_import") and st.session_state.get("mass_import_result"):
+                result = st.session_state.mass_import_result
+
+                st.markdown("---")
+                st.markdown("### Dokument-Analyse")
+
+                erkannt = sum(1 for d in result["dokumente"] if d.get("erkanntes_az"))
+                nicht_erkannt = len(result["dokumente"]) - erkannt
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Aktenzeichen erkannt", erkannt)
+                with col2:
+                    st.metric("Ohne Zuordnung", nicht_erkannt)
+
+                st.markdown("---")
+
+                # Bestehende Akten laden
+                bestehende_akten = st.session_state.get("akten_liste", [])
+                demo_az = ["2026/0001", "2026/0002", "2026/0003", "2026/0008", "2026/0015"]
+                alle_az = list(set([a["az"] for a in bestehende_akten] + demo_az))
+
+                for idx, dok in enumerate(result["dokumente"]):
+                    with st.container():
+                        col1, col2, col3 = st.columns([2, 2, 1.5])
+
+                        with col1:
+                            st.markdown(f"**{dok['name']}**")
+                            st.caption(f"{dok['groesse']} | Typ: {dok['erkannter_typ']}")
+                            if dok.get("ocr_text_preview"):
+                                st.caption(f"OCR: {dok['ocr_text_preview']}")
+
+                        with col2:
+                            if dok.get("erkanntes_az"):
+                                st.success(f"Erkannt: {dok['erkanntes_az']}")
+                            else:
+                                st.warning("Nicht erkannt")
+
+                            # Zuordnung waehlen/aendern
+                            zuordnung = st.selectbox(
+                                "Zuordnen zu",
+                                ["-- Akte waehlen --", "Neue Akte erstellen"] + alle_az,
+                                index=alle_az.index(dok["erkanntes_az"]) + 2 if dok.get("erkanntes_az") and dok["erkanntes_az"] in alle_az else 0,
+                                key=f"mass_zuordnung_{idx}",
+                                label_visibility="collapsed"
+                            )
+
+                        with col3:
+                            st.checkbox("Importieren", value=True, key=f"mass_import_check_{idx}")
+
+                    st.markdown("---")
+
+                # Aktionen
+                col_btn1, col_btn2 = st.columns(2)
+
+                with col_btn1:
+                    if st.button("Ausgewaehlte Dokumente importieren", type="primary", use_container_width=True, key="confirm_mass"):
+                        importiert = sum(1 for idx in range(len(result["dokumente"])) if st.session_state.get(f"mass_import_check_{idx}", True))
+                        st.session_state.show_mass_import = False
+                        st.session_state.mass_import_result = None
+                        st.success(f"{importiert} Dokument(e) wurden importiert und den Akten zugeordnet!")
+                        st.balloons()
+
+                with col_btn2:
+                    if st.button("Abbrechen", use_container_width=True, key="cancel_mass"):
+                        st.session_state.show_mass_import = False
+                        st.session_state.mass_import_result = None
+                        st.rerun()
 
     # =====================================================
     # TAB 4: Dokumentenverarbeitung
@@ -2007,8 +2245,8 @@ def show_cases_list():
     """Vollstaendige Aktenuebersicht mit Such- und Filterfunktion"""
     st.header("Aktenuebersicht")
 
-    # Demo-Akten
-    akten = [
+    # Demo-Akten (Basis)
+    demo_akten = [
         {"az": "2026/0001", "mandant": "Max Mustermann", "gegner": "Maria Mustermann",
          "typ": "Scheidung", "anwalt": "Dr. Mueller", "status": "Aktiv",
          "angelegt": "02.01.2026", "letzte_aktivitaet": "12.01.2026"},
@@ -2031,6 +2269,41 @@ def show_cases_list():
          "typ": "Versorgungsausgleich", "anwalt": "Dr. Mueller", "status": "Ruhend",
          "angelegt": "01.09.2025", "letzte_aktivitaet": "15.11.2025"},
     ]
+
+    # Importierte Akten aus Session State hinzufuegen
+    importierte_akten = st.session_state.get("akten_liste", [])
+
+    # Zusammenfuehren (importierte Akten zuerst, da neuer)
+    akten = []
+    vorhandene_az = set()
+
+    # Zuerst importierte Akten
+    for akte in importierte_akten:
+        if akte["az"] not in vorhandene_az:
+            # Fehlende Felder ergaenzen
+            akte_komplett = {
+                "az": akte.get("az", ""),
+                "mandant": akte.get("mandant", ""),
+                "gegner": akte.get("gegner", ""),
+                "typ": akte.get("typ", ""),
+                "anwalt": akte.get("anwalt", st.session_state.user.get("nachname", "N/A")),
+                "status": akte.get("status", "Aktiv"),
+                "angelegt": akte.get("angelegt", ""),
+                "letzte_aktivitaet": akte.get("letzte_aktivitaet", akte.get("angelegt", "")),
+                "quelle": akte.get("quelle", "Import")
+            }
+            akten.append(akte_komplett)
+            vorhandene_az.add(akte["az"])
+
+    # Dann Demo-Akten (falls nicht bereits vorhanden)
+    for akte in demo_akten:
+        if akte["az"] not in vorhandene_az:
+            akten.append(akte)
+            vorhandene_az.add(akte["az"])
+
+    # Hinweis auf importierte Akten
+    if importierte_akten:
+        st.success(f"{len(importierte_akten)} Akte(n) aus Import vorhanden")
 
     # Such- und Filterbereich
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
