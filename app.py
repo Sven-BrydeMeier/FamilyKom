@@ -1531,34 +1531,66 @@ def show_lawyer_dashboard():
             st.markdown("#### Import aus RA-MICRO")
             st.markdown("""
             Importieren Sie Akten und Dokumente direkt aus RA-MICRO.
-            Das System erkennt automatisch die Aktenstruktur.
+            Das System erkennt automatisch die Aktenstruktur und
+            trennt PDF-Dateien anhand der **Lesezeichen (Bookmarks)**.
             """)
 
             ra_micro_file = st.file_uploader(
                 "RA-MICRO Export-Datei hochladen",
-                type=["xml", "zip", "rar"],
+                type=["xml", "zip", "rar", "pdf"],
                 key="ra_micro_import",
-                help="Unterstuetzte Formate: XML-Export, ZIP-Archiv"
+                help="Unterstuetzte Formate: XML-Export, ZIP-Archiv, PDF mit Lesezeichen"
             )
 
             if ra_micro_file:
                 st.info(f"Datei: {ra_micro_file.name} ({ra_micro_file.size / 1024:.1f} KB)")
 
-                with st.expander("Import-Optionen"):
+                with st.expander("Import-Optionen", expanded=True):
                     import_mandanten = st.checkbox("Mandantendaten importieren", value=True)
                     import_akten = st.checkbox("Akten importieren", value=True)
                     import_dokumente = st.checkbox("Dokumente importieren", value=True)
                     import_fristen = st.checkbox("Fristen importieren", value=True)
 
+                    st.markdown("---")
+                    st.markdown("**PDF-Verarbeitung:**")
+
+                    pdf_lesezeichen = st.checkbox(
+                        "PDF-Dateien nach Lesezeichen (Bookmarks) aufteilen",
+                        value=True,
+                        help="Erkennt die im PDF hinterlegten Lesezeichen und erstellt separate Dokumente"
+                    )
+
+                    if pdf_lesezeichen:
+                        lesezeichen_ebene = st.selectbox(
+                            "Aufteilungsebene",
+                            [
+                                "Nur Hauptlesezeichen (Ebene 1)",
+                                "Alle Lesezeichen",
+                                "Aktenbasiert (nach Aktenzeichen in Lesezeichen)"
+                            ],
+                            key="ra_micro_bookmark_level"
+                        )
+
+                        dateinamen_option = st.selectbox(
+                            "Dateinamen",
+                            [
+                                "Aus Lesezeichen uebernehmen",
+                                "Aktenzeichen + Lesezeichen",
+                                "Fortlaufend nummerieren"
+                            ],
+                            key="ra_micro_filename"
+                        )
+
                 if st.button("RA-MICRO Import starten", type="primary", key="start_ra_micro"):
                     with st.spinner("Importiere Daten aus RA-MICRO..."):
                         import time
                         time.sleep(2)
+
                     st.success("""
                     Import erfolgreich!
 
                     - 12 Akten importiert
-                    - 45 Dokumente importiert
+                    - 45 Dokumente importiert (davon 28 aus PDF-Lesezeichen extrahiert)
                     - 8 Fristen importiert
                     """)
 
@@ -1757,61 +1789,97 @@ def show_lawyer_dashboard():
                         st.success("5 Dokumente wurden erstellt und der Akte zugeordnet!")
 
         with doc_col2:
-            st.markdown("#### Inhaltsverzeichnis-basierte Aufteilung")
+            st.markdown("#### Lesezeichen-basierte Aufteilung (PDF Bookmarks)")
             st.markdown("""
-            Teilen Sie Dokumente anhand eines vorhandenen
-            Inhaltsverzeichnisses oder einer Gliederung auf.
+            Teilen Sie PDF-Dokumente anhand der im PDF hinterlegten
+            Lesezeichen (Bookmarks) auf. Diese Methode eignet sich besonders
+            fuer strukturierte Dokumente aus RA-MICRO oder Gerichtsakten.
             """)
 
-            toc_file = st.file_uploader(
-                "Dokument mit Inhaltsverzeichnis hochladen",
+            bookmark_file = st.file_uploader(
+                "PDF mit Lesezeichen hochladen",
                 type=["pdf"],
-                key="toc_upload"
+                key="bookmark_upload"
             )
 
-            if toc_file:
-                st.info(f"Datei: {toc_file.name}")
+            if bookmark_file:
+                st.info(f"Datei: {bookmark_file.name}")
 
-                toc_seite = st.number_input(
-                    "Inhaltsverzeichnis auf Seite",
-                    min_value=1,
-                    value=1,
-                    key="toc_seite"
-                )
-
-                if st.button("Inhaltsverzeichnis erkennen", key="detect_toc"):
-                    with st.spinner("Analysiere Inhaltsverzeichnis..."):
+                if st.button("Lesezeichen auslesen", key="detect_bookmarks"):
+                    with st.spinner("Lese PDF-Lesezeichen aus..."):
                         import time
                         time.sleep(1)
 
-                    st.success("Inhaltsverzeichnis erkannt!")
+                    st.success("Lesezeichen gefunden!")
 
-                    # Demo-Inhaltsverzeichnis
-                    st.markdown("**Erkannte Gliederung:**")
-                    gliederung = [
-                        "1. Antraege (S. 1-2)",
-                        "2. Sachverhalt (S. 3-8)",
-                        "3. Rechtliche Wuerdigung (S. 9-15)",
-                        "4. Anlagen (S. 16-30)",
-                        "   4.1 Einkommensnachweise (S. 16-22)",
-                        "   4.2 Vermoegensuebersicht (S. 23-27)",
-                        "   4.3 Sonstige Dokumente (S. 28-30)",
+                    # Demo-Lesezeichen (wie sie typischerweise in RA-MICRO oder Gerichtsakten vorkommen)
+                    st.markdown("**Gefundene Lesezeichen:**")
+                    lesezeichen = [
+                        {"ebene": 1, "titel": "Schriftsatz vom 15.12.2025", "seite": 1},
+                        {"ebene": 2, "titel": "Antraege", "seite": 1},
+                        {"ebene": 2, "titel": "Sachverhalt", "seite": 3},
+                        {"ebene": 2, "titel": "Begruendung", "seite": 5},
+                        {"ebene": 1, "titel": "Anlage 1 - Heiratsurkunde", "seite": 12},
+                        {"ebene": 1, "titel": "Anlage 2 - Geburtsurkunden", "seite": 13},
+                        {"ebene": 1, "titel": "Anlage 3 - Einkommensnachweise", "seite": 16},
+                        {"ebene": 2, "titel": "Gehaltsabrechnung Dez 2025", "seite": 16},
+                        {"ebene": 2, "titel": "Gehaltsabrechnung Nov 2025", "seite": 17},
+                        {"ebene": 2, "titel": "Gehaltsabrechnung Okt 2025", "seite": 18},
+                        {"ebene": 1, "titel": "Anlage 4 - Steuerbescheid", "seite": 19},
                     ]
 
-                    for item in gliederung:
-                        st.write(item)
+                    # Lesezeichen mit Einrueckung anzeigen
+                    for lz in lesezeichen:
+                        einrueckung = "    " * (lz["ebene"] - 1)
+                        checkbox_key = f"lz_{lz['seite']}_{lz['titel'][:10]}"
+                        st.checkbox(
+                            f"{einrueckung}{lz['titel']} (S. {lz['seite']})",
+                            value=lz["ebene"] == 1,  # Nur Hauptebene standardmaessig ausgewaehlt
+                            key=checkbox_key
+                        )
 
-                    aufteilung_level = st.selectbox(
+                    st.markdown("---")
+
+                    aufteilung_option = st.selectbox(
                         "Aufteilungsebene",
-                        ["Hauptkapitel (1., 2., ...)", "Unterkapitel (1.1, 1.2, ...)", "Alle Ebenen"],
-                        key="aufteilung_level"
+                        [
+                            "Nur Hauptlesezeichen (Ebene 1)",
+                            "Alle Lesezeichen",
+                            "Nur ausgewaehlte Lesezeichen"
+                        ],
+                        key="bookmark_level"
                     )
 
-                    if st.button("Nach Inhaltsverzeichnis aufteilen", type="primary", key="split_by_toc"):
-                        with st.spinner("Teile Dokument auf..."):
+                    zusammenfuehren = st.checkbox(
+                        "Untergeordnete Lesezeichen zum Hauptlesezeichen zusammenfuehren",
+                        value=True,
+                        key="merge_bookmarks",
+                        help="z.B. alle Gehaltsabrechnungen werden zu einem Dokument 'Einkommensnachweise' zusammengefasst"
+                    )
+
+                    if st.button("Nach Lesezeichen aufteilen", type="primary", key="split_by_bookmarks"):
+                        with st.spinner("Teile PDF nach Lesezeichen auf..."):
                             import time
                             time.sleep(2)
-                        st.success("Dokument wurde in 4 Teile aufgeteilt!")
+                        st.success("""
+                        PDF wurde erfolgreich aufgeteilt!
+
+                        - 7 Einzeldokumente erstellt
+                        - Dateinamen aus Lesezeichen uebernommen
+                        - Bereit zur Aktenzuordnung
+                        """)
+
+                        # Ergebnis-Vorschau
+                        st.markdown("**Erstellte Dokumente:**")
+                        erstellte_docs = [
+                            "Schriftsatz_vom_15.12.2025.pdf (S. 1-11)",
+                            "Anlage_1_Heiratsurkunde.pdf (S. 12)",
+                            "Anlage_2_Geburtsurkunden.pdf (S. 13-15)",
+                            "Anlage_3_Einkommensnachweise.pdf (S. 16-18)",
+                            "Anlage_4_Steuerbescheid.pdf (S. 19-22)",
+                        ]
+                        for doc in erstellte_docs:
+                            st.write(f"- {doc}")
 
             st.markdown("---")
 

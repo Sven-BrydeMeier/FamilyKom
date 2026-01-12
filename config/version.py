@@ -8,7 +8,7 @@ Format: YYYY.MM.DD.HHMM
 from datetime import datetime
 
 # Letzte Aenderung - wird bei jedem Update aktualisiert
-LAST_UPDATE = "2026-01-12 21:45:00"
+LAST_UPDATE = "2026-01-12 22:00:00"
 
 # Hauptversion
 MAJOR_VERSION = 1
