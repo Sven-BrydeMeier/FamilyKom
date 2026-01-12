@@ -104,11 +104,14 @@ def extrahiere_lesezeichen_aus_pdf(pdf_file: BinaryIO) -> List[Lesezeichen]:
         Liste von Lesezeichen-Objekten
     """
     if not PYPDF_AVAILABLE:
+        print("pypdf nicht verfuegbar")
         return []
 
     lesezeichen_liste = []
 
     try:
+        # Dateiposition zuruecksetzen - wichtig bei Streamlit file_uploader!
+        pdf_file.seek(0)
         reader = PdfReader(pdf_file)
 
         def verarbeite_outline(outline, ebene=1) -> List[Lesezeichen]:
@@ -126,33 +129,81 @@ def extrahiere_lesezeichen_aus_pdf(pdf_file: BinaryIO) -> List[Lesezeichen]:
                 else:
                     # Einzelnes Lesezeichen
                     try:
-                        titel = item.title if hasattr(item, 'title') else str(item)
+                        # Titel extrahieren - verschiedene Moeglichkeiten probieren
+                        titel = ""
+                        if hasattr(item, 'title'):
+                            titel = item.title
+                        elif hasattr(item, '/Title'):
+                            titel = item['/Title']
+                        elif isinstance(item, dict) and '/Title' in item:
+                            titel = item['/Title']
+                        else:
+                            titel = str(item)
 
-                        # Seitennummer ermitteln
-                        seite = 0
-                        if hasattr(item, 'page'):
-                            if item.page is not None:
-                                try:
-                                    seite = reader.get_page_number(item.page) + 1
-                                except:
-                                    seite = 1
+                        # Seitennummer ermitteln - verschiedene Methoden probieren
+                        seite = 1
+                        if hasattr(item, 'page') and item.page is not None:
+                            try:
+                                seite = reader.get_page_number(item.page) + 1
+                            except Exception:
+                                pass
+                        elif hasattr(item, 'destination') and item.destination is not None:
+                            try:
+                                if hasattr(item.destination, 'page'):
+                                    seite = reader.get_page_number(item.destination.page) + 1
+                            except Exception:
+                                pass
 
-                        lz = Lesezeichen(
-                            titel=titel,
-                            seite=seite,
-                            ebene=ebene
-                        )
-                        ergebnis.append(lz)
+                        if titel:  # Nur hinzufuegen wenn Titel vorhanden
+                            lz = Lesezeichen(
+                                titel=titel,
+                                seite=seite,
+                                ebene=ebene
+                            )
+                            ergebnis.append(lz)
                     except Exception as e:
+                        print(f"Fehler bei Lesezeichen-Item: {e}")
                         continue
 
             return ergebnis
 
-        if reader.outline:
-            lesezeichen_liste = verarbeite_outline(reader.outline)
+        # Verschiedene Methoden zum Zugriff auf die Outline probieren
+        outline = None
+
+        # Methode 1: reader.outline (moderne pypdf Version)
+        if hasattr(reader, 'outline') and reader.outline:
+            outline = reader.outline
+            print(f"Outline via reader.outline gefunden: {len(outline) if isinstance(outline, list) else 'nicht-Liste'}")
+
+        # Methode 2: reader.outlines (aeltere Versionen)
+        elif hasattr(reader, 'outlines') and reader.outlines:
+            outline = reader.outlines
+            print(f"Outline via reader.outlines gefunden")
+
+        # Methode 3: Direkt aus dem Trailer
+        elif hasattr(reader, 'trailer') and reader.trailer:
+            try:
+                root = reader.trailer.get('/Root')
+                if root and '/Outlines' in root:
+                    outline = root['/Outlines']
+                    print("Outline via Trailer gefunden")
+            except Exception:
+                pass
+
+        if outline:
+            lesezeichen_liste = verarbeite_outline(outline)
+            print(f"Insgesamt {len(lesezeichen_liste)} Lesezeichen extrahiert")
+        else:
+            print("Keine Outline/Lesezeichen im PDF gefunden")
+            # Debug: PDF-Metadaten ausgeben
+            print(f"PDF hat {len(reader.pages)} Seiten")
+            if hasattr(reader, 'metadata') and reader.metadata:
+                print(f"Metadata: {reader.metadata}")
 
     except Exception as e:
         print(f"Fehler beim Lesen der Lesezeichen: {e}")
+        import traceback
+        traceback.print_exc()
 
     return lesezeichen_liste
 

@@ -2198,6 +2198,8 @@ def show_lawyer_dashboard():
                 else:
                     if st.button("Lesezeichen auslesen", key="detect_bookmarks"):
                         with st.spinner("Lese PDF-Lesezeichen aus..."):
+                            # Dateiposition zuruecksetzen vor dem Lesen
+                            bookmark_file.seek(0)
                             # Echte Lesezeichen-Extraktion
                             lesezeichen_objekte = extrahiere_lesezeichen_aus_pdf(bookmark_file)
 
@@ -2284,7 +2286,25 @@ def show_lawyer_dashboard():
                                 else:
                                     st.warning("Keine Dokumente konnten erstellt werden.")
                         else:
-                            st.warning("Keine Lesezeichen im PDF gefunden. Dieses PDF enthaelt keine Bookmarks.")
+                            st.warning("""
+                            **Keine Lesezeichen im PDF gefunden.**
+
+                            Moegliche Ursachen:
+                            - Das PDF enthaelt keine Bookmarks/Lesezeichen
+                            - Die Lesezeichen sind in einem nicht unterstuetzten Format
+
+                            Tipp: Pruefen Sie in einem PDF-Reader (z.B. Adobe Acrobat),
+                            ob das Dokument Lesezeichen enthaelt.
+                            """)
+
+                            # Zusaetzliche PDF-Info anzeigen
+                            try:
+                                bookmark_file.seek(0)
+                                from pypdf import PdfReader
+                                temp_reader = PdfReader(bookmark_file)
+                                st.info(f"PDF-Info: {len(temp_reader.pages)} Seiten")
+                            except Exception as e:
+                                st.error(f"Fehler beim Lesen der PDF-Info: {e}")
 
             st.markdown("---")
 
