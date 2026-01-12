@@ -389,104 +389,233 @@ def show_sidebar():
 
 def show_admin_menu():
     """Admin-Menü in der Sidebar"""
+
+    current = st.session_state.get("current_page", "Dashboard")
+
     st.markdown("#### Administration")
 
-    menu = st.radio(
-        "Navigation",
-        [
-            "Dashboard",
-            "Benutzerverwaltung",
-            "Tabellen-Updates",
-            "Systemüberwachung",
-            "Einstellungen",
-        ],
-        label_visibility="collapsed"
-    )
+    if st.button("Dashboard", use_container_width=True,
+                 type="primary" if current == "Dashboard" else "secondary",
+                 key="admin_dashboard"):
+        st.session_state.current_page = "Dashboard"
+        st.rerun()
 
-    st.session_state.current_page = menu
+    st.markdown("---")
+    st.markdown("#### Verwaltung")
+
+    if st.button("Benutzerverwaltung", use_container_width=True,
+                 type="primary" if current == "Benutzerverwaltung" else "secondary",
+                 key="admin_benutzer"):
+        st.session_state.current_page = "Benutzerverwaltung"
+        st.rerun()
+
+    if st.button("Tabellen-Updates", use_container_width=True,
+                 type="primary" if current == "Tabellen-Updates" else "secondary",
+                 key="admin_tabellen"):
+        st.session_state.current_page = "Tabellen-Updates"
+        st.rerun()
+
+    if st.button("Systemueberwachung", use_container_width=True,
+                 type="primary" if current == "Systemüberwachung" else "secondary",
+                 key="admin_system"):
+        st.session_state.current_page = "Systemüberwachung"
+        st.rerun()
+
+    st.markdown("---")
+
+    if st.button("Einstellungen", use_container_width=True,
+                 type="primary" if current == "Einstellungen" else "secondary",
+                 key="admin_settings"):
+        st.session_state.current_page = "Einstellungen"
+        st.rerun()
 
 
 def show_anwalt_menu():
     """Anwalts-Menü in der Sidebar"""
+
+    # Prüfe ob wir in einer Detailansicht sind
+    current = st.session_state.get("current_page", "Dashboard")
+    in_detail_view = current == "Aktendetail"
+
     st.markdown("#### Aktenmanagement")
 
-    menu = st.radio(
-        "Navigation",
-        [
-            "Dashboard",
-            "Akten",
-            "Neue Akte",
-            "---",
-            "Kindesunterhalt",
-            "Ehegattenunterhalt",
-            "Zugewinnausgleich",
-            "RVG-Gebuehren",
-            "---",
-            "Dokumentenanforderung",
-            "Schriftsaetze",
-            "Dokumente",
-            "---",
-            "API-Einstellungen",
-        ],
-        label_visibility="collapsed"
-    )
+    # Hauptnavigation
+    if st.button("Dashboard", use_container_width=True,
+                 type="primary" if current == "Dashboard" else "secondary"):
+        st.session_state.current_page = "Dashboard"
+        st.session_state.selected_case = None
+        st.rerun()
 
-    # Entferne Trennzeichen aus der Auswahl
-    if menu == "---":
-        menu = "Dashboard"
+    if st.button("Akten", use_container_width=True,
+                 type="primary" if current in ["Akten", "Aktendetail"] else "secondary"):
+        st.session_state.current_page = "Akten"
+        st.session_state.selected_case = None
+        st.rerun()
 
-    st.session_state.current_page = menu
+    if st.button("Neue Akte anlegen", use_container_width=True,
+                 type="primary" if current == "Neue Akte" else "secondary"):
+        st.session_state.current_page = "Neue Akte"
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### Berechnungen")
+
+    if st.button("Kindesunterhalt", use_container_width=True,
+                 type="primary" if current == "Kindesunterhalt" else "secondary"):
+        st.session_state.current_page = "Kindesunterhalt"
+        st.rerun()
+
+    if st.button("Ehegattenunterhalt", use_container_width=True,
+                 type="primary" if current == "Ehegattenunterhalt" else "secondary"):
+        st.session_state.current_page = "Ehegattenunterhalt"
+        st.rerun()
+
+    if st.button("Zugewinnausgleich", use_container_width=True,
+                 type="primary" if current == "Zugewinnausgleich" else "secondary"):
+        st.session_state.current_page = "Zugewinnausgleich"
+        st.rerun()
+
+    if st.button("RVG-Gebuehren", use_container_width=True,
+                 type="primary" if current == "RVG-Gebuehren" else "secondary"):
+        st.session_state.current_page = "RVG-Gebuehren"
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### Dokumente")
+
+    if st.button("Dokumentenanforderung", use_container_width=True,
+                 type="primary" if current == "Dokumentenanforderung" else "secondary"):
+        st.session_state.current_page = "Dokumentenanforderung"
+        st.rerun()
+
+    if st.button("Schriftsaetze", use_container_width=True,
+                 type="primary" if current == "Schriftsaetze" else "secondary"):
+        st.session_state.current_page = "Schriftsaetze"
+        st.rerun()
+
+    if st.button("Dokumentenverwaltung", use_container_width=True,
+                 type="primary" if current == "Dokumente" else "secondary"):
+        st.session_state.current_page = "Dokumente"
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### Einstellungen")
+
+    if st.button("API-Einstellungen", use_container_width=True,
+                 type="primary" if current == "API-Einstellungen" else "secondary"):
+        st.session_state.current_page = "API-Einstellungen"
+        st.rerun()
 
 
 def show_mitarbeiter_menu():
     """Mitarbeiter-Menü in der Sidebar (eingeschränkte Funktionen)"""
+
+    current = st.session_state.get("current_page", "Dashboard")
+
     st.markdown("#### Kanzlei")
 
-    menu = st.radio(
-        "Navigation",
-        [
-            "Dashboard",
-            "Akten",
-            "---",
-            "Kindesunterhalt",
-            "Ehegattenunterhalt",
-            "Zugewinnausgleich",
-            "RVG-Gebuehren",
-            "---",
-            "Dokumente",
-            "Fristen",
-        ],
-        label_visibility="collapsed"
-    )
+    if st.button("Dashboard", use_container_width=True,
+                 type="primary" if current == "Dashboard" else "secondary",
+                 key="ma_dashboard"):
+        st.session_state.current_page = "Dashboard"
+        st.session_state.selected_case = None
+        st.rerun()
 
-    # Entferne Trennzeichen aus der Auswahl
-    if menu == "---":
-        menu = "Dashboard"
+    if st.button("Akten", use_container_width=True,
+                 type="primary" if current in ["Akten", "Aktendetail"] else "secondary",
+                 key="ma_akten"):
+        st.session_state.current_page = "Akten"
+        st.session_state.selected_case = None
+        st.rerun()
 
-    st.session_state.current_page = menu
+    st.markdown("---")
+    st.markdown("#### Berechnungen")
+
+    if st.button("Kindesunterhalt", use_container_width=True,
+                 type="primary" if current == "Kindesunterhalt" else "secondary",
+                 key="ma_kindesunterhalt"):
+        st.session_state.current_page = "Kindesunterhalt"
+        st.rerun()
+
+    if st.button("Ehegattenunterhalt", use_container_width=True,
+                 type="primary" if current == "Ehegattenunterhalt" else "secondary",
+                 key="ma_ehegattenunterhalt"):
+        st.session_state.current_page = "Ehegattenunterhalt"
+        st.rerun()
+
+    if st.button("Zugewinnausgleich", use_container_width=True,
+                 type="primary" if current == "Zugewinnausgleich" else "secondary",
+                 key="ma_zugewinn"):
+        st.session_state.current_page = "Zugewinnausgleich"
+        st.rerun()
+
+    if st.button("RVG-Gebuehren", use_container_width=True,
+                 type="primary" if current == "RVG-Gebuehren" else "secondary",
+                 key="ma_rvg"):
+        st.session_state.current_page = "RVG-Gebuehren"
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### Verwaltung")
+
+    if st.button("Dokumentenverwaltung", use_container_width=True,
+                 type="primary" if current == "Dokumente" else "secondary",
+                 key="ma_dokumente"):
+        st.session_state.current_page = "Dokumente"
+        st.rerun()
+
+    if st.button("Fristenverwaltung", use_container_width=True,
+                 type="primary" if current == "Fristen" else "secondary",
+                 key="ma_fristen"):
+        st.session_state.current_page = "Fristen"
+        st.rerun()
 
 
 def show_mandant_menu():
     """Mandanten-Menü in der Sidebar"""
+
+    current = st.session_state.get("current_page", "Übersicht")
+
     st.markdown("#### Meine Akte")
 
     case = st.session_state.current_case
     if case:
         st.info(f"Az.: {case.get('case_number')}")
 
-    menu = st.radio(
-        "Navigation",
-        [
-            "Übersicht",
-            "Dokumente hochladen",
-            "Meine Dokumente",
-            "Berechnungen",
-            "Nachrichten",
-        ],
-        label_visibility="collapsed"
-    )
+    if st.button("Uebersicht", use_container_width=True,
+                 type="primary" if current == "Übersicht" else "secondary",
+                 key="mandant_uebersicht"):
+        st.session_state.current_page = "Übersicht"
+        st.rerun()
 
-    st.session_state.current_page = menu
+    st.markdown("---")
+    st.markdown("#### Dokumente")
+
+    if st.button("Dokumente hochladen", use_container_width=True,
+                 type="primary" if current == "Dokumente hochladen" else "secondary",
+                 key="mandant_upload"):
+        st.session_state.current_page = "Dokumente hochladen"
+        st.rerun()
+
+    if st.button("Meine Dokumente", use_container_width=True,
+                 type="primary" if current == "Meine Dokumente" else "secondary",
+                 key="mandant_docs"):
+        st.session_state.current_page = "Meine Dokumente"
+        st.rerun()
+
+    st.markdown("---")
+
+    if st.button("Berechnungen", use_container_width=True,
+                 type="primary" if current == "Berechnungen" else "secondary",
+                 key="mandant_calc"):
+        st.session_state.current_page = "Berechnungen"
+        st.rerun()
+
+    if st.button("Nachrichten", use_container_width=True,
+                 type="primary" if current == "Nachrichten" else "secondary",
+                 key="mandant_msg"):
+        st.session_state.current_page = "Nachrichten"
+        st.rerun()
 
 
 def show_main_content():
