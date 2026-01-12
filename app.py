@@ -513,6 +513,8 @@ def show_main_content():
             show_lawyer_dashboard()
         elif page == "Akten":
             show_cases_list()
+        elif page == "Aktendetail":
+            show_case_detail()
         elif page == "Neue Akte":
             show_new_case()
         elif page == "Kindesunterhalt":
@@ -538,6 +540,8 @@ def show_main_content():
             show_mitarbeiter_dashboard()
         elif page == "Akten":
             show_cases_list()
+        elif page == "Aktendetail":
+            show_case_detail()
         elif page == "Kindesunterhalt":
             show_kindesunterhalt_calculator()
         elif page == "Ehegattenunterhalt":
@@ -1510,11 +1514,726 @@ def show_cases_list():
             with col6:
                 if st.button("Oeffnen", key=f"open_{akte['az']}", use_container_width=True):
                     st.session_state.selected_case = akte
-                    st.info(f"Akte {akte['az']} ausgewaehlt")
+                    st.session_state.current_page = "Aktendetail"
+                    st.rerun()
 
             st.markdown("---")
     else:
         st.warning("Keine Akten gefunden.")
+
+
+def show_case_detail():
+    """Detailansicht einer Akte mit umfangreichem Dokumentenmanagement"""
+    akte = st.session_state.get("selected_case")
+
+    if not akte:
+        st.warning("Keine Akte ausgewaehlt")
+        if st.button("Zurueck zur Aktenuebersicht"):
+            st.session_state.current_page = "Akten"
+            st.rerun()
+        return
+
+    # Zurueck-Button
+    col_back, col_title = st.columns([1, 4])
+    with col_back:
+        if st.button("← Zurueck"):
+            st.session_state.current_page = "Akten"
+            st.session_state.selected_case = None
+            st.rerun()
+
+    with col_title:
+        st.header(f"Akte {akte['az']}")
+
+    # Akteninfo-Header
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Mandant", akte["mandant"])
+    with col2:
+        st.metric("Gegner", akte["gegner"])
+    with col3:
+        st.metric("Verfahrensart", akte["typ"])
+    with col4:
+        st.metric("Status", akte["status"])
+
+    st.markdown("---")
+
+    # Tabs fuer verschiedene Bereiche
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Dokumente",
+        "Berechnungen",
+        "Gehaltsabrechnungen",
+        "Schriftsaetze",
+        "Aktenhistorie"
+    ])
+
+    # =====================================================
+    # TAB 1: Dokumentenmanagement
+    # =====================================================
+    with tab1:
+        st.subheader("Dokumentenverwaltung")
+
+        # Demo-Dokumente fuer diese Akte
+        dokumente = [
+            {
+                "id": 1,
+                "name": "Personalausweis_Mustermann.pdf",
+                "kategorie": "Persoenliche Dokumente",
+                "typ": "Personalausweis",
+                "hochgeladen": "05.01.2026 10:30",
+                "hochgeladen_von": "Mandant",
+                "groesse": "2.1 MB",
+                "status": "geprueft",
+                "geprueft_am": "06.01.2026 14:00",
+                "geprueft_von": "Dr. Mueller",
+                "notiz": "In Ordnung"
+            },
+            {
+                "id": 2,
+                "name": "Heiratsurkunde.pdf",
+                "kategorie": "Persoenliche Dokumente",
+                "typ": "Heiratsurkunde",
+                "hochgeladen": "05.01.2026 10:32",
+                "hochgeladen_von": "Mandant",
+                "groesse": "1.8 MB",
+                "status": "geprueft",
+                "geprueft_am": "06.01.2026 14:05",
+                "geprueft_von": "Dr. Mueller",
+                "notiz": "Vollstaendig"
+            },
+            {
+                "id": 3,
+                "name": "Gehaltsabrechnung_Dez_2025.pdf",
+                "kategorie": "Einkommensnachweise",
+                "typ": "Gehaltsabrechnung",
+                "hochgeladen": "08.01.2026 09:15",
+                "hochgeladen_von": "Mandant",
+                "groesse": "0.9 MB",
+                "status": "ocr_fertig",
+                "ocr_ergebnis": {
+                    "brutto": 4850.00,
+                    "netto": 3125.50,
+                    "steuerklasse": "III",
+                    "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                    "monat": "Dezember 2025"
+                },
+                "geprueft_am": None,
+                "geprueft_von": None,
+                "notiz": None
+            },
+            {
+                "id": 4,
+                "name": "Gehaltsabrechnung_Nov_2025.pdf",
+                "kategorie": "Einkommensnachweise",
+                "typ": "Gehaltsabrechnung",
+                "hochgeladen": "08.01.2026 09:16",
+                "hochgeladen_von": "Mandant",
+                "groesse": "0.9 MB",
+                "status": "ocr_fertig",
+                "ocr_ergebnis": {
+                    "brutto": 4850.00,
+                    "netto": 3125.50,
+                    "steuerklasse": "III",
+                    "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                    "monat": "November 2025"
+                },
+                "geprueft_am": None,
+                "geprueft_von": None,
+                "notiz": None
+            },
+            {
+                "id": 5,
+                "name": "Mietvertrag_Ehewohnung.pdf",
+                "kategorie": "Wohnung",
+                "typ": "Mietvertrag",
+                "hochgeladen": "10.01.2026 14:20",
+                "hochgeladen_von": "Mandant",
+                "groesse": "3.2 MB",
+                "status": "neu",
+                "geprueft_am": None,
+                "geprueft_von": None,
+                "notiz": None
+            },
+            {
+                "id": 6,
+                "name": "Kontoauszug_Gemeinschaftskonto.pdf",
+                "kategorie": "Vermoegen",
+                "typ": "Kontoauszug",
+                "hochgeladen": "11.01.2026 11:00",
+                "hochgeladen_von": "Mandant",
+                "groesse": "1.5 MB",
+                "status": "neu",
+                "geprueft_am": None,
+                "geprueft_von": None,
+                "notiz": None
+            },
+        ]
+
+        # Filter und Statistik
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            gesamt = len(dokumente)
+            st.metric("Gesamt", gesamt)
+        with col2:
+            geprueft = len([d for d in dokumente if d["status"] == "geprueft"])
+            st.metric("Geprueft", geprueft)
+        with col3:
+            offen = len([d for d in dokumente if d["status"] in ["neu", "ocr_fertig"]])
+            st.metric("Offen", offen)
+        with col4:
+            mit_ocr = len([d for d in dokumente if d.get("ocr_ergebnis")])
+            st.metric("Mit OCR-Daten", mit_ocr)
+
+        st.markdown("---")
+
+        # Filter
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            filter_kategorie = st.selectbox(
+                "Kategorie",
+                ["Alle", "Persoenliche Dokumente", "Einkommensnachweise", "Wohnung", "Vermoegen"]
+            )
+        with filter_col2:
+            filter_status = st.selectbox(
+                "Status",
+                ["Alle", "Neu (unbearbeitet)", "OCR fertig", "Geprueft"]
+            )
+
+        # Dokumente filtern
+        gefilterte_docs = dokumente
+        if filter_kategorie != "Alle":
+            gefilterte_docs = [d for d in gefilterte_docs if d["kategorie"] == filter_kategorie]
+        if filter_status == "Neu (unbearbeitet)":
+            gefilterte_docs = [d for d in gefilterte_docs if d["status"] == "neu"]
+        elif filter_status == "OCR fertig":
+            gefilterte_docs = [d for d in gefilterte_docs if d["status"] == "ocr_fertig"]
+        elif filter_status == "Geprueft":
+            gefilterte_docs = [d for d in gefilterte_docs if d["status"] == "geprueft"]
+
+        st.markdown("---")
+
+        # Dokumentenliste mit Aktionen
+        for doc in gefilterte_docs:
+            with st.container():
+                col1, col2, col3, col4 = st.columns([3, 1.5, 1.5, 2])
+
+                with col1:
+                    # Status-Icon
+                    if doc["status"] == "geprueft":
+                        status_icon = "✓"
+                        status_color = "green"
+                    elif doc["status"] == "ocr_fertig":
+                        status_icon = "📊"
+                        status_color = "blue"
+                    else:
+                        status_icon = "○"
+                        status_color = "orange"
+
+                    st.markdown(f"**{status_icon} {doc['name']}**")
+                    st.caption(f"{doc['kategorie']} | {doc['typ']} | {doc['groesse']}")
+
+                with col2:
+                    st.caption(f"Hochgeladen: {doc['hochgeladen']}")
+                    st.caption(f"Von: {doc['hochgeladen_von']}")
+
+                with col3:
+                    if doc["status"] == "geprueft":
+                        st.success("Geprueft")
+                        st.caption(f"von {doc['geprueft_von']}")
+                    elif doc["status"] == "ocr_fertig":
+                        st.info("OCR ausgewertet")
+                    else:
+                        st.warning("Neu")
+
+                with col4:
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        if st.button("Ansehen", key=f"view_{doc['id']}", use_container_width=True):
+                            st.session_state.view_document = doc["id"]
+
+                    with btn_col2:
+                        if doc["status"] != "geprueft":
+                            if st.button("Pruefen", key=f"check_{doc['id']}", use_container_width=True):
+                                st.session_state.check_document = doc["id"]
+
+                # Dokument-Detail anzeigen wenn ausgewaehlt
+                if st.session_state.get("view_document") == doc["id"]:
+                    with st.expander(f"Dokumentvorschau: {doc['name']}", expanded=True):
+                        st.info("Dokumentvorschau wird hier angezeigt (PDF-Viewer)")
+
+                        if doc.get("ocr_ergebnis"):
+                            st.markdown("#### Extrahierte Daten (OCR)")
+                            ocr = doc["ocr_ergebnis"]
+                            ocr_col1, ocr_col2 = st.columns(2)
+                            with ocr_col1:
+                                st.write(f"**Brutto:** {ocr['brutto']:.2f} EUR")
+                                st.write(f"**Netto:** {ocr['netto']:.2f} EUR")
+                            with ocr_col2:
+                                st.write(f"**Steuerklasse:** {ocr['steuerklasse']}")
+                                st.write(f"**Arbeitgeber:** {ocr['arbeitgeber']}")
+                                st.write(f"**Monat:** {ocr['monat']}")
+
+                        if doc["notiz"]:
+                            st.markdown(f"**Notiz:** {doc['notiz']}")
+
+                        if st.button("Schliessen", key=f"close_view_{doc['id']}"):
+                            st.session_state.view_document = None
+                            st.rerun()
+
+                # Pruefungsformular anzeigen wenn ausgewaehlt
+                if st.session_state.get("check_document") == doc["id"]:
+                    with st.expander(f"Dokument pruefen: {doc['name']}", expanded=True):
+                        st.markdown("#### Dokumentenpruefung")
+
+                        pruefung_status = st.radio(
+                            "Status",
+                            ["In Ordnung", "Nachbesserung erforderlich", "Abgelehnt"],
+                            horizontal=True,
+                            key=f"status_{doc['id']}"
+                        )
+
+                        notiz = st.text_area(
+                            "Notiz / Kommentar",
+                            placeholder="Optionale Bemerkung zum Dokument...",
+                            key=f"notiz_{doc['id']}"
+                        )
+
+                        btn_c1, btn_c2, btn_c3 = st.columns(3)
+                        with btn_c1:
+                            if st.button("Als geprueft markieren", type="primary", key=f"save_check_{doc['id']}"):
+                                st.success(f"Dokument wurde als '{pruefung_status}' markiert!")
+                                st.session_state.check_document = None
+                                st.rerun()
+                        with btn_c2:
+                            if st.button("Abbrechen", key=f"cancel_check_{doc['id']}"):
+                                st.session_state.check_document = None
+                                st.rerun()
+
+                st.markdown("---")
+
+    # =====================================================
+    # TAB 2: Berechnungen mit Versionierung
+    # =====================================================
+    with tab2:
+        st.subheader("Berechnungen zur Akte")
+
+        # Demo-Berechnungen
+        berechnungen = [
+            {
+                "id": 1,
+                "typ": "Kindesunterhalt",
+                "version": 3,
+                "erstellt": "12.01.2026 14:30",
+                "erstellt_von": "Dr. Mueller",
+                "notiz": "Aktuelle Berechnung mit allen drei Kindern",
+                "ergebnis": {
+                    "gesamt_zahlbetrag": 1245,
+                    "kinder": [
+                        {"name": "Emma", "zahlbetrag": 498},
+                        {"name": "Lukas", "zahlbetrag": 452},
+                        {"name": "Sophie", "zahlbetrag": 295}
+                    ]
+                },
+                "freigegeben": True
+            },
+            {
+                "id": 2,
+                "typ": "Kindesunterhalt",
+                "version": 2,
+                "erstellt": "10.01.2026 16:15",
+                "erstellt_von": "Dr. Mueller",
+                "notiz": "Korrektur: Kindergeld bei Emma vollstaendig angerechnet",
+                "ergebnis": {
+                    "gesamt_zahlbetrag": 1295,
+                    "kinder": [
+                        {"name": "Emma", "zahlbetrag": 548},
+                        {"name": "Lukas", "zahlbetrag": 452},
+                        {"name": "Sophie", "zahlbetrag": 295}
+                    ]
+                },
+                "freigegeben": False
+            },
+            {
+                "id": 3,
+                "typ": "Kindesunterhalt",
+                "version": 1,
+                "erstellt": "08.01.2026 11:00",
+                "erstellt_von": "Dr. Mueller",
+                "notiz": "Erstberechnung basierend auf Gehaltsabrechnungen",
+                "ergebnis": {
+                    "gesamt_zahlbetrag": 1320,
+                    "kinder": [
+                        {"name": "Emma", "zahlbetrag": 573},
+                        {"name": "Lukas", "zahlbetrag": 452},
+                        {"name": "Sophie", "zahlbetrag": 295}
+                    ]
+                },
+                "freigegeben": False
+            },
+            {
+                "id": 4,
+                "typ": "Trennungsunterhalt",
+                "version": 1,
+                "erstellt": "09.01.2026 09:30",
+                "erstellt_von": "Dr. Mueller",
+                "notiz": "Vorlaefige Berechnung, Einkommen Gegenseite geschaetzt",
+                "ergebnis": {
+                    "zahlbetrag": 687,
+                    "bedarf": 1540
+                },
+                "freigegeben": False
+            },
+        ]
+
+        # Neue Berechnung erstellen
+        with st.expander("Neue Berechnung erstellen", expanded=False):
+            calc_type = st.selectbox(
+                "Berechnungsart",
+                ["Kindesunterhalt", "Trennungsunterhalt", "Nachehelicher Unterhalt",
+                 "Zugewinnausgleich", "RVG-Gebuehren"],
+                key="new_calc_type"
+            )
+
+            notiz_neue = st.text_area(
+                "Notiz zur Berechnung",
+                placeholder="Beschreiben Sie den Anlass oder Besonderheiten dieser Berechnung...",
+                key="new_calc_notiz"
+            )
+
+            # Einkommen aus Gehaltsabrechnungen vorschlagen
+            st.markdown("#### Vorgeschlagene Werte aus Dokumenten")
+            st.info("Aus den OCR-Daten der Gehaltsabrechnungen wurden folgende Werte extrahiert:")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Mandant:**")
+                st.write("Durchschnitt Brutto: 4.850,00 EUR")
+                st.write("Durchschnitt Netto: 3.125,50 EUR")
+            with col2:
+                if st.button("Werte uebernehmen", key="uebernehmen_btn"):
+                    st.success("Werte wurden in die Berechnung uebernommen!")
+
+            if st.button("Berechnung starten", type="primary", key="start_calc"):
+                # Hier wuerde zur entsprechenden Berechnungsseite navigiert
+                st.session_state.calc_for_case = akte["az"]
+                st.session_state.calc_type = calc_type
+                st.session_state.calc_notiz = notiz_neue
+                st.success("Berechnung wird vorbereitet...")
+
+        st.markdown("---")
+
+        # Berechnungshistorie
+        st.markdown("#### Berechnungshistorie")
+
+        for calc in berechnungen:
+            with st.container():
+                col1, col2, col3 = st.columns([3, 2, 1.5])
+
+                with col1:
+                    version_badge = f"v{calc['version']}"
+                    freigabe_badge = " (Freigegeben)" if calc["freigegeben"] else ""
+                    st.markdown(f"**{calc['typ']}** - Version {version_badge}{freigabe_badge}")
+                    st.caption(calc["notiz"])
+
+                with col2:
+                    st.caption(f"Erstellt: {calc['erstellt']}")
+                    st.caption(f"Von: {calc['erstellt_von']}")
+
+                    if calc["typ"] == "Kindesunterhalt":
+                        st.write(f"**Gesamt: {calc['ergebnis']['gesamt_zahlbetrag']} EUR/Monat**")
+                    elif calc["typ"] == "Trennungsunterhalt":
+                        st.write(f"**Zahlbetrag: {calc['ergebnis']['zahlbetrag']} EUR/Monat**")
+
+                with col3:
+                    if st.button("Details", key=f"calc_detail_{calc['id']}", use_container_width=True):
+                        st.session_state.view_calc = calc["id"]
+
+                    if not calc["freigegeben"]:
+                        if st.button("Freigeben", key=f"calc_release_{calc['id']}", use_container_width=True):
+                            st.success("Berechnung fuer Mandanten freigegeben!")
+
+                # Berechnungsdetail anzeigen
+                if st.session_state.get("view_calc") == calc["id"]:
+                    with st.expander(f"Details: {calc['typ']} v{calc['version']}", expanded=True):
+                        st.markdown(f"**Notiz:** {calc['notiz']}")
+                        st.markdown(f"**Erstellt:** {calc['erstellt']} von {calc['erstellt_von']}")
+
+                        st.markdown("---")
+                        st.markdown("#### Ergebnis")
+
+                        if calc["typ"] == "Kindesunterhalt":
+                            for kind in calc["ergebnis"]["kinder"]:
+                                st.write(f"- {kind['name']}: **{kind['zahlbetrag']} EUR/Monat**")
+                            st.markdown(f"**Gesamt: {calc['ergebnis']['gesamt_zahlbetrag']} EUR/Monat**")
+                        elif calc["typ"] == "Trennungsunterhalt":
+                            st.write(f"Bedarf: {calc['ergebnis']['bedarf']} EUR")
+                            st.write(f"**Zahlbetrag: {calc['ergebnis']['zahlbetrag']} EUR/Monat**")
+
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            if st.button("Als PDF exportieren", key=f"export_{calc['id']}"):
+                                st.info("PDF wird generiert...")
+                        with col_b:
+                            if st.button("Schliessen", key=f"close_calc_{calc['id']}"):
+                                st.session_state.view_calc = None
+                                st.rerun()
+
+                st.markdown("---")
+
+    # =====================================================
+    # TAB 3: Gehaltsabrechnungen mit OCR-Auswertung
+    # =====================================================
+    with tab3:
+        st.subheader("Gehaltsabrechnungen (OCR-Auswertung)")
+
+        # OCR-ausgewertete Gehaltsabrechnungen
+        gehaltsabrechnungen = [
+            {
+                "id": 1,
+                "monat": "Dezember 2025",
+                "datei": "Gehaltsabrechnung_Dez_2025.pdf",
+                "person": "Mandant (Max Mustermann)",
+                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                "brutto": 4850.00,
+                "netto": 3125.50,
+                "steuerklasse": "III",
+                "lohnsteuer": 523.40,
+                "sozialabgaben": 987.60,
+                "kindergeld": 0,
+                "sonderzahlung": 0,
+                "ocr_konfidenz": 0.95,
+                "in_berechnung": True
+            },
+            {
+                "id": 2,
+                "monat": "November 2025",
+                "datei": "Gehaltsabrechnung_Nov_2025.pdf",
+                "person": "Mandant (Max Mustermann)",
+                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                "brutto": 4850.00,
+                "netto": 3125.50,
+                "steuerklasse": "III",
+                "lohnsteuer": 523.40,
+                "sozialabgaben": 987.60,
+                "kindergeld": 0,
+                "sonderzahlung": 0,
+                "ocr_konfidenz": 0.94,
+                "in_berechnung": True
+            },
+            {
+                "id": 3,
+                "monat": "Oktober 2025",
+                "datei": "Gehaltsabrechnung_Okt_2025.pdf",
+                "person": "Mandant (Max Mustermann)",
+                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                "brutto": 4850.00,
+                "netto": 3125.50,
+                "steuerklasse": "III",
+                "lohnsteuer": 523.40,
+                "sozialabgaben": 987.60,
+                "kindergeld": 0,
+                "sonderzahlung": 0,
+                "ocr_konfidenz": 0.92,
+                "in_berechnung": False
+            },
+        ]
+
+        # Zusammenfassung
+        st.markdown("#### Einkommensuebersicht")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            avg_brutto = sum(g["brutto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
+            st.metric("⌀ Brutto", f"{avg_brutto:,.2f} EUR")
+        with col2:
+            avg_netto = sum(g["netto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
+            st.metric("⌀ Netto", f"{avg_netto:,.2f} EUR")
+        with col3:
+            st.metric("Anzahl Monate", len(gehaltsabrechnungen))
+        with col4:
+            in_calc = len([g for g in gehaltsabrechnungen if g["in_berechnung"]])
+            st.metric("In Berechnung", f"{in_calc}/{len(gehaltsabrechnungen)}")
+
+        st.markdown("---")
+
+        # Detailliste
+        st.markdown("#### Einzelne Gehaltsabrechnungen")
+
+        for ga in gehaltsabrechnungen:
+            with st.container():
+                col1, col2, col3 = st.columns([2, 2.5, 1.5])
+
+                with col1:
+                    konfidenz_pct = int(ga["ocr_konfidenz"] * 100)
+                    st.markdown(f"**{ga['monat']}**")
+                    st.caption(f"OCR-Konfidenz: {konfidenz_pct}%")
+                    st.caption(f"Datei: {ga['datei']}")
+
+                with col2:
+                    st.write(f"**Brutto:** {ga['brutto']:,.2f} EUR | **Netto:** {ga['netto']:,.2f} EUR")
+                    st.caption(f"Steuerklasse {ga['steuerklasse']} | LSt: {ga['lohnsteuer']:.2f} EUR | Sozialabg.: {ga['sozialabgaben']:.2f} EUR")
+                    st.caption(f"Arbeitgeber: {ga['arbeitgeber']}")
+
+                with col3:
+                    # Checkbox fuer Berechnung
+                    in_calc = st.checkbox(
+                        "In Berechnung",
+                        value=ga["in_berechnung"],
+                        key=f"ga_calc_{ga['id']}"
+                    )
+
+                    if st.button("Korrigieren", key=f"ga_edit_{ga['id']}", use_container_width=True):
+                        st.session_state.edit_ga = ga["id"]
+
+                # Korrekturformular
+                if st.session_state.get("edit_ga") == ga["id"]:
+                    with st.expander("Werte korrigieren", expanded=True):
+                        st.warning("Die OCR-Erkennung kann Fehler enthalten. Bitte pruefen und korrigieren Sie die Werte.")
+
+                        edit_col1, edit_col2 = st.columns(2)
+                        with edit_col1:
+                            new_brutto = st.number_input(
+                                "Brutto",
+                                value=ga["brutto"],
+                                step=10.0,
+                                key=f"edit_brutto_{ga['id']}"
+                            )
+                            new_netto = st.number_input(
+                                "Netto",
+                                value=ga["netto"],
+                                step=10.0,
+                                key=f"edit_netto_{ga['id']}"
+                            )
+                        with edit_col2:
+                            new_stk = st.selectbox(
+                                "Steuerklasse",
+                                ["I", "II", "III", "IV", "V", "VI"],
+                                index=["I", "II", "III", "IV", "V", "VI"].index(ga["steuerklasse"]),
+                                key=f"edit_stk_{ga['id']}"
+                            )
+                            new_ag = st.text_input(
+                                "Arbeitgeber",
+                                value=ga["arbeitgeber"],
+                                key=f"edit_ag_{ga['id']}"
+                            )
+
+                        btn_col1, btn_col2 = st.columns(2)
+                        with btn_col1:
+                            if st.button("Speichern", type="primary", key=f"save_ga_{ga['id']}"):
+                                st.success("Werte wurden korrigiert und gespeichert!")
+                                st.session_state.edit_ga = None
+                                st.rerun()
+                        with btn_col2:
+                            if st.button("Abbrechen", key=f"cancel_ga_{ga['id']}"):
+                                st.session_state.edit_ga = None
+                                st.rerun()
+
+                st.markdown("---")
+
+        # Import in Berechnung
+        st.markdown("#### In Berechnung uebernehmen")
+        if st.button("Markierte Gehaltsabrechnungen in neue Berechnung uebernehmen", type="primary"):
+            st.success("Daten wurden fuer die Berechnung vorbereitet. Bitte wechseln Sie zum Tab 'Berechnungen'.")
+
+    # =====================================================
+    # TAB 4: Schriftsaetze zur Akte
+    # =====================================================
+    with tab4:
+        st.subheader("Schriftsaetze zur Akte")
+
+        # Demo-Schriftsaetze
+        schriftsaetze = [
+            {
+                "id": 1,
+                "titel": "Scheidungsantrag",
+                "status": "versendet",
+                "erstellt": "06.01.2026",
+                "versendet": "07.01.2026",
+                "empfaenger": "AG Rendsburg"
+            },
+            {
+                "id": 2,
+                "titel": "Unterhaltsantrag (Kindesunterhalt)",
+                "status": "entwurf",
+                "erstellt": "12.01.2026",
+                "versendet": None,
+                "empfaenger": "AG Rendsburg"
+            },
+        ]
+
+        for ss in schriftsaetze:
+            col1, col2, col3 = st.columns([3, 1.5, 1.5])
+
+            with col1:
+                st.markdown(f"**{ss['titel']}**")
+                st.caption(f"Empfaenger: {ss['empfaenger']}")
+
+            with col2:
+                if ss["status"] == "versendet":
+                    st.success(f"Versendet: {ss['versendet']}")
+                else:
+                    st.warning("Entwurf")
+                st.caption(f"Erstellt: {ss['erstellt']}")
+
+            with col3:
+                if st.button("Oeffnen", key=f"ss_{ss['id']}", use_container_width=True):
+                    st.info("Schriftsatz wird geoeffnet...")
+
+            st.markdown("---")
+
+        if st.button("Neuen Schriftsatz erstellen"):
+            st.session_state.current_page = "Schriftsaetze"
+            st.rerun()
+
+    # =====================================================
+    # TAB 5: Aktenhistorie
+    # =====================================================
+    with tab5:
+        st.subheader("Aktenhistorie")
+
+        # Demo-Historie
+        historie = [
+            {"datum": "12.01.2026 14:30", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
+             "details": "Kindesunterhalt v3 erstellt"},
+            {"datum": "11.01.2026 11:00", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Kontoauszug_Gemeinschaftskonto.pdf"},
+            {"datum": "10.01.2026 16:15", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
+             "details": "Kindesunterhalt v2 erstellt"},
+            {"datum": "10.01.2026 14:20", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Mietvertrag_Ehewohnung.pdf"},
+            {"datum": "09.01.2026 09:30", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
+             "details": "Trennungsunterhalt v1 erstellt"},
+            {"datum": "08.01.2026 11:00", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
+             "details": "Kindesunterhalt v1 erstellt"},
+            {"datum": "08.01.2026 09:16", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Gehaltsabrechnung_Nov_2025.pdf (OCR ausgefuehrt)"},
+            {"datum": "08.01.2026 09:15", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Gehaltsabrechnung_Dez_2025.pdf (OCR ausgefuehrt)"},
+            {"datum": "07.01.2026 10:00", "aktion": "Schriftsatz versendet", "benutzer": "Dr. Mueller",
+             "details": "Scheidungsantrag an AG Rendsburg"},
+            {"datum": "06.01.2026 14:05", "aktion": "Dokument geprueft", "benutzer": "Dr. Mueller",
+             "details": "Heiratsurkunde.pdf als 'In Ordnung' markiert"},
+            {"datum": "06.01.2026 14:00", "aktion": "Dokument geprueft", "benutzer": "Dr. Mueller",
+             "details": "Personalausweis_Mustermann.pdf als 'In Ordnung' markiert"},
+            {"datum": "05.01.2026 10:32", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Heiratsurkunde.pdf"},
+            {"datum": "05.01.2026 10:30", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+             "details": "Personalausweis_Mustermann.pdf"},
+            {"datum": "02.01.2026 09:00", "aktion": "Akte angelegt", "benutzer": "Dr. Mueller",
+             "details": f"Akte {akte['az']} fuer {akte['mandant']} angelegt"},
+        ]
+
+        for eintrag in historie:
+            col1, col2, col3 = st.columns([1.5, 1.5, 4])
+
+            with col1:
+                st.caption(eintrag["datum"])
+
+            with col2:
+                st.write(eintrag["benutzer"])
+
+            with col3:
+                st.markdown(f"**{eintrag['aktion']}**")
+                st.caption(eintrag["details"])
+
+            st.markdown("---")
 
 
 def show_new_case():

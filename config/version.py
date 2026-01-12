@@ -8,7 +8,7 @@ Format: YYYY.MM.DD.HHMM
 from datetime import datetime
 
 # Letzte Aenderung - wird bei jedem Update aktualisiert
-LAST_UPDATE = "2026-01-12 18:30:00"
+LAST_UPDATE = "2026-01-12 20:15:00"
 
 # Hauptversion
 MAJOR_VERSION = 1
@@ -45,6 +45,20 @@ def get_last_update_datetime() -> datetime:
 
 # Aenderungsprotokoll
 CHANGELOG = [
+    {
+        "version": "1.0.20260112.2015",
+        "datum": "12.01.2026",
+        "aenderungen": [
+            "Umfangreiches Dokumentenmanagement pro Akte implementiert",
+            "Dokumenten-Approval-Workflow (In Ordnung / Nachbesserung / Abgelehnt)",
+            "Gehaltsabrechnungs-Tab mit OCR-Auswertung und Korrekturmoeglichkeit",
+            "Berechnungsversionierung mit Zeitstempel und Freitext-Notizen",
+            "Aktendetailansicht mit 5 Tabs (Dokumente, Berechnungen, Gehaltsabrechnungen, Schriftsaetze, Historie)",
+            "Import von OCR-Daten in Berechnungen",
+            "Freigabe von Berechnungen fuer Mandanten",
+            "Vollstaendige Aktenhistorie mit allen Aktionen",
+        ]
+    },
     {
         "version": "1.0.20260112.1830",
         "datum": "12.01.2026",
