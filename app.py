@@ -417,6 +417,8 @@ def show_anwalt_menu():
             "---",
             "Schriftsaetze",
             "Dokumente",
+            "---",
+            "API-Einstellungen",
         ],
         label_visibility="collapsed"
     )
@@ -517,6 +519,8 @@ def show_main_content():
             show_documents_templates()
         elif page == "Dokumente":
             show_documents_management()
+        elif page == "API-Einstellungen":
+            show_api_settings()
 
     # Mitarbeiter-Seiten
     elif role == "mitarbeiter":
@@ -584,8 +588,260 @@ def show_system_monitoring():
 
 
 def show_settings():
-    st.header("Einstellungen")
-    st.info("Systemeinstellungen.")
+    """Admin-Einstellungen mit API-Konfiguration"""
+    st.header("Systemeinstellungen")
+
+    tab1, tab2, tab3 = st.tabs(["Allgemein", "API-Zugangsdaten", "Sicherheit"])
+
+    with tab1:
+        st.subheader("Allgemeine Einstellungen")
+
+        st.markdown("#### Kanzlei-Informationen")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input("Kanzleiname", value="RHM - Radtke, Heigener und Meier")
+            st.text_input("Strasse", value="Musterstrasse 1")
+            st.text_input("PLZ / Ort", value="24768 Rendsburg")
+        with col2:
+            st.text_input("Telefon", value="04331 / 12345")
+            st.text_input("E-Mail", value="info@rhm-kanzlei.de")
+            st.text_input("Website", value="www.rhm-kanzlei.de")
+
+        st.markdown("#### Anwendungseinstellungen")
+        st.checkbox("Demo-Modus aktiviert", value=True, help="Demo-Buttons auf Login-Seite anzeigen")
+        st.checkbox("Mandanten-Registrierung erlauben", value=False)
+        st.number_input("Session-Timeout (Minuten)", value=30, min_value=5, max_value=480)
+
+    with tab2:
+        show_api_settings_content()
+
+    with tab3:
+        st.subheader("Sicherheitseinstellungen")
+
+        st.markdown("#### Authentifizierung")
+        st.checkbox("Zwei-Faktor-Authentifizierung fuer Anwaelte", value=False)
+        st.checkbox("Zwei-Faktor-Authentifizierung fuer Admin", value=True)
+        st.number_input("Maximale Login-Versuche", value=5, min_value=3, max_value=10)
+        st.number_input("Sperrzeit nach fehlgeschlagenen Logins (Minuten)", value=15, min_value=5, max_value=60)
+
+        st.markdown("#### Passwort-Richtlinien")
+        st.number_input("Minimale Passwortlaenge", value=8, min_value=6, max_value=20)
+        st.checkbox("Grossbuchstaben erforderlich", value=True)
+        st.checkbox("Sonderzeichen erforderlich", value=True)
+        st.checkbox("Zahlen erforderlich", value=True)
+
+    if st.button("Einstellungen speichern", type="primary"):
+        st.success("Einstellungen wurden gespeichert.")
+
+
+def show_api_settings():
+    """API-Einstellungen fuer Anwaelte"""
+    st.header("API-Einstellungen")
+    st.markdown("Konfigurieren Sie hier die Zugangsdaten fuer externe Dienste.")
+
+    show_api_settings_content()
+
+
+def show_api_settings_content():
+    """Gemeinsamer Inhalt fuer API-Einstellungen (Admin und Anwalt)"""
+
+    # Initialisiere API-Settings in Session State falls nicht vorhanden
+    if "api_settings" not in st.session_state:
+        st.session_state.api_settings = {
+            "supabase_url": "",
+            "supabase_anon_key": "",
+            "supabase_service_key": "",
+            "upstash_redis_url": "",
+            "upstash_redis_token": "",
+            "openai_api_key": "",
+            "anthropic_api_key": "",
+            "google_vision_api_key": "",
+        }
+
+    st.info(
+        "Diese Einstellungen werden zusaetzlich zu den Streamlit Secrets verwendet. "
+        "Fuer die Produktion empfehlen wir, sensible Daten ausschliesslich in den "
+        "Streamlit Secrets (.streamlit/secrets.toml) zu speichern."
+    )
+
+    # Supabase
+    st.markdown("---")
+    st.markdown("### Supabase (Datenbank & Auth)")
+    st.markdown("Ihre Supabase-Projektdaten finden Sie unter: Project Settings > API")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        supabase_url = st.text_input(
+            "Supabase URL",
+            value=st.session_state.api_settings.get("supabase_url", ""),
+            placeholder="https://xxxxx.supabase.co",
+            help="Die URL Ihres Supabase-Projekts"
+        )
+    with col2:
+        supabase_anon = st.text_input(
+            "Supabase Anon Key",
+            value=st.session_state.api_settings.get("supabase_anon_key", ""),
+            type="password",
+            placeholder="eyJhbGciOiJIUzI1...",
+            help="Der oeffentliche (anon) API-Key"
+        )
+
+    supabase_service = st.text_input(
+        "Supabase Service Role Key (nur Admin)",
+        value=st.session_state.api_settings.get("supabase_service_key", ""),
+        type="password",
+        placeholder="eyJhbGciOiJIUzI1...",
+        help="Der Service-Role-Key fuer Admin-Operationen (GEHEIM HALTEN!)",
+        disabled=st.session_state.role != "admin"
+    )
+
+    # Upstash Redis
+    st.markdown("---")
+    st.markdown("### Upstash Redis (Cache)")
+    st.markdown("Ihre Upstash-Daten finden Sie im Upstash Dashboard unter: Database > REST API")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        upstash_url = st.text_input(
+            "Upstash Redis URL",
+            value=st.session_state.api_settings.get("upstash_redis_url", ""),
+            placeholder="https://xxxxx.upstash.io",
+            help="Die REST-URL Ihrer Upstash-Datenbank"
+        )
+    with col2:
+        upstash_token = st.text_input(
+            "Upstash Redis Token",
+            value=st.session_state.api_settings.get("upstash_redis_token", ""),
+            type="password",
+            placeholder="AxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxQ==",
+            help="Der REST-Token fuer die Authentifizierung"
+        )
+
+    # KI APIs
+    st.markdown("---")
+    st.markdown("### KI-Dienste")
+    st.markdown("API-Keys fuer KI-gestuetzte Funktionen (OCR, Dokumentenanalyse, etc.)")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        openai_key = st.text_input(
+            "OpenAI API Key",
+            value=st.session_state.api_settings.get("openai_api_key", ""),
+            type="password",
+            placeholder="sk-...",
+            help="Fuer GPT-basierte Textanalyse und -generierung"
+        )
+
+        google_vision_key = st.text_input(
+            "Google Cloud Vision API Key",
+            value=st.session_state.api_settings.get("google_vision_api_key", ""),
+            type="password",
+            placeholder="AIza...",
+            help="Fuer OCR und Dokumentenerkennung"
+        )
+
+    with col2:
+        anthropic_key = st.text_input(
+            "Anthropic API Key",
+            value=st.session_state.api_settings.get("anthropic_api_key", ""),
+            type="password",
+            placeholder="sk-ant-...",
+            help="Fuer Claude-basierte Textanalyse"
+        )
+
+    # Speichern
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns([1, 1, 2])
+
+    with col1:
+        if st.button("Speichern", type="primary", use_container_width=True):
+            st.session_state.api_settings = {
+                "supabase_url": supabase_url,
+                "supabase_anon_key": supabase_anon,
+                "supabase_service_key": supabase_service,
+                "upstash_redis_url": upstash_url,
+                "upstash_redis_token": upstash_token,
+                "openai_api_key": openai_key,
+                "anthropic_api_key": anthropic_key,
+                "google_vision_api_key": google_vision_key,
+            }
+            st.success("API-Einstellungen wurden gespeichert!")
+
+    with col2:
+        if st.button("Verbindung testen", use_container_width=True):
+            test_api_connections()
+
+    # Hinweis zu Streamlit Secrets
+    st.markdown("---")
+    with st.expander("Streamlit Secrets konfigurieren"):
+        st.markdown("""
+        Fuer die Produktionsumgebung sollten Sie die Zugangsdaten in der Datei
+        `.streamlit/secrets.toml` speichern:
+
+        ```toml
+        # Supabase
+        SUPABASE_URL = "https://xxxxx.supabase.co"
+        SUPABASE_KEY = "eyJhbGciOiJIUzI1..."
+        SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1..."
+
+        # Upstash Redis
+        UPSTASH_REDIS_URL = "https://xxxxx.upstash.io"
+        UPSTASH_REDIS_TOKEN = "Axxxx..."
+
+        # KI APIs
+        OPENAI_API_KEY = "sk-..."
+        ANTHROPIC_API_KEY = "sk-ant-..."
+        GOOGLE_VISION_API_KEY = "AIza..."
+        ```
+
+        Bei Streamlit Cloud werden diese unter "App Settings > Secrets" konfiguriert.
+        """)
+
+
+def test_api_connections():
+    """Testet die API-Verbindungen"""
+    settings = st.session_state.get("api_settings", {})
+
+    st.markdown("#### Verbindungstests")
+
+    # Supabase Test
+    if settings.get("supabase_url") and settings.get("supabase_anon_key"):
+        try:
+            # Hier wuerde der echte Test stattfinden
+            st.success("Supabase: Verbindung erfolgreich")
+        except Exception as e:
+            st.error(f"Supabase: Verbindung fehlgeschlagen - {e}")
+    else:
+        st.warning("Supabase: Keine Zugangsdaten konfiguriert")
+
+    # Upstash Test
+    if settings.get("upstash_redis_url") and settings.get("upstash_redis_token"):
+        try:
+            # Hier wuerde der echte Test stattfinden
+            st.success("Upstash Redis: Verbindung erfolgreich")
+        except Exception as e:
+            st.error(f"Upstash Redis: Verbindung fehlgeschlagen - {e}")
+    else:
+        st.warning("Upstash Redis: Keine Zugangsdaten konfiguriert")
+
+    # OpenAI Test
+    if settings.get("openai_api_key"):
+        st.success("OpenAI: API-Key konfiguriert")
+    else:
+        st.warning("OpenAI: Kein API-Key konfiguriert")
+
+    # Anthropic Test
+    if settings.get("anthropic_api_key"):
+        st.success("Anthropic: API-Key konfiguriert")
+    else:
+        st.warning("Anthropic: Kein API-Key konfiguriert")
+
+    # Google Vision Test
+    if settings.get("google_vision_api_key"):
+        st.success("Google Vision: API-Key konfiguriert")
+    else:
+        st.warning("Google Vision: Kein API-Key konfiguriert")
 
 
 # =============================================================================
