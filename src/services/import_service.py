@@ -2,7 +2,7 @@
 Import-Service fuer FamilyKom
 
 Bietet echte Import-Funktionalitaet fuer:
-- PDF-Dateien mit Lesezeichen-Extraktion
+- PDF-Dateien mit Lesezeichen-Extraktion (nach NotarKom-Methode)
 - ZIP-Archive mit Struktur-Erkennung
 - Aktenzeichen-Erkennung aus Dateinamen und Inhalten
 """
@@ -17,9 +17,9 @@ from typing import Dict, List, Optional, Tuple, BinaryIO
 from dataclasses import dataclass, field
 from datetime import datetime
 
-# PDF-Bibliotheken
+# PDF-Bibliotheken - PyPDF2 (funktioniert wie in NotarKom)
 try:
-    from pypdf import PdfReader, PdfWriter
+    from PyPDF2 import PdfReader, PdfWriter
     PYPDF_AVAILABLE = True
 except ImportError:
     PYPDF_AVAILABLE = False
@@ -87,15 +87,115 @@ AKTENZEICHEN_MUSTER = [
 
 # Muster fuer Parteinamen
 PARTEI_MUSTER = [
-    r'([A-ZÄÖÜ][a-zäöüß]+),\s*([A-ZÄÖÜ][a-zäöüß]+)\s*\.?/?\.?\s*([A-ZÄÖÜ][a-zäöüß]+),\s*([A-ZÄÖÜ][a-zäöüß]+)',  # Schmidt, Maria ./. Schmidt, Thomas
+    r'([A-ZÄÖÜ][a-zäöüß]+),\s*([A-ZÄÖÜ][a-zäöüß]+)\s*\.?/?\.?\s*([A-ZÄÖÜ][a-zäöüß]+),\s*([A-ZÄÖÜ][a-zäöüß]+)',
     r'Antragsteller(?:in)?:\s*([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)?)',
     r'Antragsgegner(?:in)?:\s*([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)?)',
 ]
 
 
+def extract_documents_from_bookmarks(pdf_reader, num_pages) -> List[Dict]:
+    """
+    Extrahiert Dokumente aus PDF-Lesezeichen (Bookmarks/Outlines).
+    Nach der funktionierenden NotarKom-Methode.
+
+    Args:
+        pdf_reader: PdfReader-Objekt
+        num_pages: Gesamtseitenzahl des PDFs
+
+    Returns:
+        Liste von Dokumenten mit name, start_page, end_page
+    """
+    try:
+        outlines = pdf_reader.outline
+        if not outlines:
+            return []
+
+        # Bookmarks rekursiv flach extrahieren
+        flat_bookmarks = []
+
+        def walk_outlines(items):
+            for item in items:
+                if isinstance(item, list):
+                    walk_outlines(item)  # Rekursiv bei verschachtelten Bookmarks
+                else:
+                    try:
+                        title = getattr(item, 'title', None) or str(item)
+                        # Wichtig: get_destination_page_number statt get_page_number!
+                        page_idx = pdf_reader.get_destination_page_number(item)
+                        if title and page_idx is not None:
+                            flat_bookmarks.append((title.strip(), page_idx))
+                    except Exception as e:
+                        print(f"Fehler bei Bookmark: {e}")
+                        continue
+
+        walk_outlines(outlines)
+
+        if not flat_bookmarks:
+            return []
+
+        # Nach Seitennummer sortieren und Duplikate entfernen
+        flat_bookmarks = sorted(set(flat_bookmarks), key=lambda x: x[1])
+
+        print(f"Gefundene Bookmarks: {len(flat_bookmarks)}")
+        for title, page in flat_bookmarks[:5]:  # Debug: erste 5 zeigen
+            print(f"  - '{title}' auf Seite {page + 1}")
+
+        # Dokumente mit Start- und End-Seiten erstellen
+        documents = []
+        for idx, (title, start_idx) in enumerate(flat_bookmarks):
+            start_page = start_idx + 1  # 1-basiert
+
+            # End-Seite = Seite vor dem naechsten Bookmark
+            if idx + 1 < len(flat_bookmarks):
+                end_page = flat_bookmarks[idx + 1][1]
+            else:
+                end_page = num_pages
+
+            documents.append({
+                'name': title,
+                'start_page': start_page,
+                'end_page': end_page,
+            })
+
+        return documents
+
+    except Exception as e:
+        print(f"Fehler beim Extrahieren der Bookmarks: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def split_pdf_by_pages(pdf_bytes: bytes, start_page: int, end_page: int) -> bytes:
+    """
+    Extrahiert einen Seitenbereich als eigenes PDF.
+
+    Args:
+        pdf_bytes: Original-PDF als Bytes
+        start_page: Startseite (1-basiert)
+        end_page: Endseite (1-basiert, inklusiv)
+
+    Returns:
+        bytes: Extrahiertes PDF als Bytes
+    """
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+
+    # Seiten kopieren (0-basiert)
+    for page_num in range(start_page - 1, end_page):
+        if page_num < len(reader.pages):
+            writer.add_page(reader.pages[page_num])
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output.getvalue()
+
+
 def extrahiere_lesezeichen_aus_pdf(pdf_file: BinaryIO) -> List[Lesezeichen]:
     """
     Extrahiert alle Lesezeichen (Bookmarks) aus einem PDF.
+    Verwendet die NotarKom-Methode mit get_destination_page_number.
 
     Args:
         pdf_file: PDF-Datei als Binary-Stream
@@ -104,7 +204,7 @@ def extrahiere_lesezeichen_aus_pdf(pdf_file: BinaryIO) -> List[Lesezeichen]:
         Liste von Lesezeichen-Objekten
     """
     if not PYPDF_AVAILABLE:
-        print("pypdf nicht verfuegbar")
+        print("PyPDF2 nicht verfuegbar")
         return []
 
     lesezeichen_liste = []
@@ -113,92 +213,25 @@ def extrahiere_lesezeichen_aus_pdf(pdf_file: BinaryIO) -> List[Lesezeichen]:
         # Dateiposition zuruecksetzen - wichtig bei Streamlit file_uploader!
         pdf_file.seek(0)
         reader = PdfReader(pdf_file)
+        num_pages = len(reader.pages)
 
-        def verarbeite_outline(outline, ebene=1) -> List[Lesezeichen]:
-            """Rekursive Verarbeitung der Outline-Struktur"""
-            ergebnis = []
+        # NotarKom-Methode verwenden
+        documents = extract_documents_from_bookmarks(reader, num_pages)
 
-            if outline is None:
-                return ergebnis
+        # In Lesezeichen-Objekte konvertieren
+        for doc in documents:
+            lz = Lesezeichen(
+                titel=doc['name'],
+                seite=doc['start_page'],
+                ebene=1
+            )
+            lesezeichen_liste.append(lz)
 
-            for item in outline:
-                if isinstance(item, list):
-                    # Verschachtelte Liste = Unterebene
-                    if ergebnis:
-                        ergebnis[-1].kinder = verarbeite_outline(item, ebene + 1)
-                else:
-                    # Einzelnes Lesezeichen
-                    try:
-                        # Titel extrahieren - verschiedene Moeglichkeiten probieren
-                        titel = ""
-                        if hasattr(item, 'title'):
-                            titel = item.title
-                        elif hasattr(item, '/Title'):
-                            titel = item['/Title']
-                        elif isinstance(item, dict) and '/Title' in item:
-                            titel = item['/Title']
-                        else:
-                            titel = str(item)
-
-                        # Seitennummer ermitteln - verschiedene Methoden probieren
-                        seite = 1
-                        if hasattr(item, 'page') and item.page is not None:
-                            try:
-                                seite = reader.get_page_number(item.page) + 1
-                            except Exception:
-                                pass
-                        elif hasattr(item, 'destination') and item.destination is not None:
-                            try:
-                                if hasattr(item.destination, 'page'):
-                                    seite = reader.get_page_number(item.destination.page) + 1
-                            except Exception:
-                                pass
-
-                        if titel:  # Nur hinzufuegen wenn Titel vorhanden
-                            lz = Lesezeichen(
-                                titel=titel,
-                                seite=seite,
-                                ebene=ebene
-                            )
-                            ergebnis.append(lz)
-                    except Exception as e:
-                        print(f"Fehler bei Lesezeichen-Item: {e}")
-                        continue
-
-            return ergebnis
-
-        # Verschiedene Methoden zum Zugriff auf die Outline probieren
-        outline = None
-
-        # Methode 1: reader.outline (moderne pypdf Version)
-        if hasattr(reader, 'outline') and reader.outline:
-            outline = reader.outline
-            print(f"Outline via reader.outline gefunden: {len(outline) if isinstance(outline, list) else 'nicht-Liste'}")
-
-        # Methode 2: reader.outlines (aeltere Versionen)
-        elif hasattr(reader, 'outlines') and reader.outlines:
-            outline = reader.outlines
-            print(f"Outline via reader.outlines gefunden")
-
-        # Methode 3: Direkt aus dem Trailer
-        elif hasattr(reader, 'trailer') and reader.trailer:
-            try:
-                root = reader.trailer.get('/Root')
-                if root and '/Outlines' in root:
-                    outline = root['/Outlines']
-                    print("Outline via Trailer gefunden")
-            except Exception:
-                pass
-
-        if outline:
-            lesezeichen_liste = verarbeite_outline(outline)
+        if lesezeichen_liste:
             print(f"Insgesamt {len(lesezeichen_liste)} Lesezeichen extrahiert")
         else:
-            print("Keine Outline/Lesezeichen im PDF gefunden")
-            # Debug: PDF-Metadaten ausgeben
-            print(f"PDF hat {len(reader.pages)} Seiten")
-            if hasattr(reader, 'metadata') and reader.metadata:
-                print(f"Metadata: {reader.metadata}")
+            print("Keine Lesezeichen im PDF gefunden")
+            print(f"PDF hat {num_pages} Seiten")
 
     except Exception as e:
         print(f"Fehler beim Lesen der Lesezeichen: {e}")
@@ -221,6 +254,7 @@ def extrahiere_text_aus_pdf(pdf_file: BinaryIO, max_seiten: int = 5) -> str:
     """
     text = ""
 
+    # Zuerst pdfplumber versuchen (bessere Textextraktion)
     if PDFPLUMBER_AVAILABLE:
         try:
             pdf_file.seek(0)
@@ -232,6 +266,7 @@ def extrahiere_text_aus_pdf(pdf_file: BinaryIO, max_seiten: int = 5) -> str:
         except Exception as e:
             print(f"pdfplumber Fehler: {e}")
 
+    # Fallback auf PyPDF2
     if not text and PYPDF_AVAILABLE:
         try:
             pdf_file.seek(0)
@@ -244,7 +279,7 @@ def extrahiere_text_aus_pdf(pdf_file: BinaryIO, max_seiten: int = 5) -> str:
                 except:
                     continue
         except Exception as e:
-            print(f"pypdf Fehler: {e}")
+            print(f"PyPDF2 Fehler: {e}")
 
     return text
 
@@ -350,6 +385,7 @@ def teile_pdf_nach_lesezeichen(
 ) -> List[ExtrahiertesDokument]:
     """
     Teilt ein PDF anhand der Lesezeichen in einzelne Dokumente.
+    Verwendet die NotarKom split_pdf_by_pages Methode.
 
     Args:
         pdf_file: PDF-Datei als Binary-Stream
@@ -366,7 +402,10 @@ def teile_pdf_nach_lesezeichen(
 
     try:
         pdf_file.seek(0)
-        reader = PdfReader(pdf_file)
+        pdf_bytes = pdf_file.read()
+        pdf_file.seek(0)
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
         total_pages = len(reader.pages)
 
         # Lesezeichen filtern
@@ -387,41 +426,37 @@ def teile_pdf_nach_lesezeichen(
         relevante_lz = sorted(relevante_lz, key=lambda x: x.seite)
 
         for i, lz in enumerate(relevante_lz):
-            start_seite = lz.seite - 1  # 0-basiert
+            start_page = lz.seite  # 1-basiert
 
             # Ende ist entweder naechstes Lesezeichen oder Ende des Dokuments
             if i + 1 < len(relevante_lz):
-                end_seite = relevante_lz[i + 1].seite - 1
+                end_page = relevante_lz[i + 1].seite - 1
             else:
-                end_seite = total_pages
+                end_page = total_pages
 
-            # PDF-Teil extrahieren
-            writer = PdfWriter()
-            for page_num in range(start_seite, end_seite):
-                if page_num < total_pages:
-                    writer.add_page(reader.pages[page_num])
-
-            # In Bytes speichern
-            pdf_bytes_io = io.BytesIO()
-            writer.write(pdf_bytes_io)
-            pdf_bytes = pdf_bytes_io.getvalue()
+            # PDF-Teil extrahieren mit NotarKom-Methode
+            doc_pdf_bytes = split_pdf_by_pages(pdf_bytes, start_page, end_page)
 
             # Dateiname aus Lesezeichen-Titel erstellen
             safe_name = re.sub(r'[^\w\s-]', '', lz.titel)
             safe_name = re.sub(r'\s+', '_', safe_name)
+            if not safe_name:
+                safe_name = f"Dokument_{i+1}"
 
             dokument = ExtrahiertesDokument(
                 name=f"{safe_name}.pdf",
-                start_seite=start_seite + 1,
-                end_seite=end_seite,
-                seitenanzahl=end_seite - start_seite,
-                pdf_bytes=pdf_bytes,
+                start_seite=start_page,
+                end_seite=end_page,
+                seitenanzahl=end_page - start_page + 1,
+                pdf_bytes=doc_pdf_bytes,
                 text_vorschau=lz.titel
             )
             dokumente.append(dokument)
 
     except Exception as e:
         print(f"Fehler beim Teilen des PDFs: {e}")
+        import traceback
+        traceback.print_exc()
 
     return dokumente
 
@@ -518,10 +553,57 @@ def analysiere_zip_inhalt(zip_file: BinaryIO) -> Dict:
     return ergebnis
 
 
+def parse_ra_micro_pdf(pdf_file: BinaryIO) -> Dict:
+    """
+    Parst eine RA-Micro Gesamt-PDF.
+    Direkte Umsetzung der NotarKom-Methode.
+
+    Args:
+        pdf_file: PDF-Datei als Binary-Stream
+
+    Returns:
+        Dictionary mit Parsing-Ergebnissen
+    """
+    pdf_file.seek(0)
+    pdf_reader = PdfReader(pdf_file)
+    num_pages = len(pdf_reader.pages)
+
+    # Text fuer Metadaten-Extraktion
+    full_text = ""
+    for page in pdf_reader.pages[:10]:  # Erste 10 Seiten
+        full_text += (page.extract_text() or "") + "\n"
+
+    # 1. Metadaten extrahieren (Regex-basiert)
+    aktenzeichen = erkenne_aktenzeichen(full_text)
+    mandant, gegner = erkenne_parteien(full_text)
+    verfahrensart = erkenne_verfahrensart(full_text)
+
+    # 2. Dokumente aus Lesezeichen extrahieren
+    documents = extract_documents_from_bookmarks(pdf_reader, num_pages)
+
+    # Fallback wenn keine Lesezeichen
+    if not documents:
+        documents = [{
+            'name': 'Gesamtakte',
+            'start_page': 1,
+            'end_page': num_pages
+        }]
+
+    return {
+        'success': True,
+        'aktenzeichen': aktenzeichen,
+        'mandant': mandant,
+        'gegner': gegner,
+        'verfahrensart': verfahrensart,
+        'documents': documents,
+        'num_pages': num_pages
+    }
+
+
 def importiere_pdf(pdf_file: BinaryIO, dateiname: str = "") -> ImportErgebnis:
     """
     Hauptfunktion zum Importieren einer PDF-Datei.
-    Extrahiert Lesezeichen, erkennt Akten und teilt das Dokument.
+    Verwendet die NotarKom parse_ra_micro_pdf Methode.
 
     Args:
         pdf_file: PDF-Datei als Binary-Stream
@@ -535,59 +617,59 @@ def importiere_pdf(pdf_file: BinaryIO, dateiname: str = "") -> ImportErgebnis:
         erfolgreich=True
     )
 
-    # 1. Lesezeichen extrahieren
-    lesezeichen = extrahiere_lesezeichen_aus_pdf(pdf_file)
-    ergebnis.lesezeichen = lesezeichen
+    try:
+        # NotarKom-Methode verwenden
+        pdf_file.seek(0)
+        parse_result = parse_ra_micro_pdf(pdf_file)
 
-    if lesezeichen:
-        ergebnis.hinweise.append(f"{len(lesezeichen)} Lesezeichen gefunden")
-    else:
-        ergebnis.hinweise.append("Keine Lesezeichen im PDF gefunden")
+        # Lesezeichen extrahieren fuer UI
+        pdf_file.seek(0)
+        lesezeichen = extrahiere_lesezeichen_aus_pdf(pdf_file)
+        ergebnis.lesezeichen = lesezeichen
 
-    # 2. Text extrahieren fuer Analyse
-    pdf_file.seek(0)
-    text = extrahiere_text_aus_pdf(pdf_file)
+        if parse_result['documents']:
+            doc_count = len(parse_result['documents'])
+            if doc_count > 1 or parse_result['documents'][0]['name'] != 'Gesamtakte':
+                ergebnis.hinweise.append(f"{doc_count} Lesezeichen/Dokumente gefunden")
+            else:
+                ergebnis.hinweise.append("Keine Lesezeichen im PDF gefunden - Gesamtdokument wird verwendet")
 
-    # 3. Aktenzeichen erkennen
-    aktenzeichen = erkenne_aktenzeichen(text, dateiname)
+        # Akte erstellen wenn Aktenzeichen gefunden
+        if parse_result.get('aktenzeichen'):
+            akte = ErkannteAkte(
+                aktenzeichen=parse_result['aktenzeichen'],
+                mandant=parse_result.get('mandant') or "Unbekannt",
+                gegner=parse_result.get('gegner') or "Unbekannt",
+                typ=parse_result.get('verfahrensart') or "Familienrecht",
+                angelegt=datetime.now().strftime("%d.%m.%Y"),
+                quelle="RA-MICRO Import"
+            )
 
-    # 4. Parteien erkennen
-    mandant, gegner = erkenne_parteien(text)
+            # Dokumente aus Lesezeichen
+            akte.dokumente = [d['name'] for d in parse_result['documents']]
+            akte.dokument_count = len(parse_result['documents'])
 
-    # 5. Verfahrensart erkennen
-    verfahrensart = erkenne_verfahrensart(text, dateiname)
+            # PDF-Teilung fuer Download vorbereiten
+            if lesezeichen:
+                pdf_file.seek(0)
+                dokumente = teile_pdf_nach_lesezeichen(pdf_file, lesezeichen)
+                ergebnis.dokumente = dokumente
 
-    # 6. Akte erstellen wenn Aktenzeichen gefunden
-    if aktenzeichen:
-        akte = ErkannteAkte(
-            aktenzeichen=aktenzeichen,
-            mandant=mandant or "Unbekannt",
-            gegner=gegner or "Unbekannt",
-            typ=verfahrensart,
-            angelegt=datetime.now().strftime("%d.%m.%Y"),
-            quelle="PDF-Import"
-        )
-
-        # Dokumente aus Lesezeichen
-        if lesezeichen:
-            pdf_file.seek(0)
-            dokumente = teile_pdf_nach_lesezeichen(pdf_file, lesezeichen)
-            akte.dokumente = [d.name for d in dokumente]
-            akte.dokument_count = len(dokumente)
-            ergebnis.dokumente = dokumente
+            ergebnis.akten.append(akte)
         else:
-            akte.dokument_count = 1
-            akte.dokumente = [dateiname]
+            # Kein Aktenzeichen gefunden - als Dokument ohne Akte markieren
+            ergebnis.dokumente_ohne_akte.append({
+                "name": dateiname,
+                "seiten": parse_result.get('num_pages', 0),
+                "text_vorschau": ""
+            })
+            ergebnis.hinweise.append("Kein Aktenzeichen erkannt - manuelle Zuordnung erforderlich")
 
-        ergebnis.akten.append(akte)
-    else:
-        # Kein Aktenzeichen gefunden - als Dokument ohne Akte markieren
-        ergebnis.dokumente_ohne_akte.append({
-            "name": dateiname,
-            "seiten": 0,  # TODO: Seitenanzahl ermitteln
-            "text_vorschau": text[:200] if text else ""
-        })
-        ergebnis.hinweise.append("Kein Aktenzeichen erkannt - manuelle Zuordnung erforderlich")
+    except Exception as e:
+        ergebnis.erfolgreich = False
+        ergebnis.fehler.append(f"Import-Fehler: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     return ergebnis
 

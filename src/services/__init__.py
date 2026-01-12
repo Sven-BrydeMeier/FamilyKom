@@ -3,6 +3,7 @@ Services fuer FamilyKom
 
 Enthaelt:
 - Import-Service (import_service.py) - PDF/ZIP Import-Funktionalitaet
+  Verwendet PyPDF2 mit get_destination_page_number (NotarKom-Methode)
 """
 
 from .import_service import (
@@ -10,6 +11,9 @@ from .import_service import (
     importiere_zip,
     extrahiere_lesezeichen_aus_pdf,
     teile_pdf_nach_lesezeichen,
+    extract_documents_from_bookmarks,
+    split_pdf_by_pages,
+    parse_ra_micro_pdf,
     ist_pdf_verfuegbar,
     ist_pdfplumber_verfuegbar,
     get_pdf_seitenanzahl,
