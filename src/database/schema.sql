@@ -1,11 +1,12 @@
 -- FamilyKom Datenbankschema für Supabase
 -- Familienrechts-Applikation für RHM Kanzlei Rendsburg
--- Version 1.0 | Januar 2026
+-- Version 1.1 | Januar 2026 - Erweitert gemäß Pflichtenheft
 
 -- =============================================================================
 -- EXTENSIONS
 -- =============================================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =============================================================================
 -- ENUM TYPES
@@ -29,22 +30,45 @@ CREATE TYPE case_type AS ENUM (
 -- Fallstatus
 CREATE TYPE case_status AS ENUM ('aktiv', 'ruhend', 'abgeschlossen', 'archiviert');
 
--- Dokumenttypen
+-- Dokumenttypen (erweitert)
 CREATE TYPE document_type AS ENUM (
     'entgeltabrechnung',
     'steuerbescheid',
+    'lohnsteuerbescheinigung',
     'kontoauszug',
     'geburtsurkunde',
     'heiratsurkunde',
     'grundbuchauszug',
+    'handelsregisterauszug',
     'mietvertrag',
+    'kreditvertrag',
     'arbeitsvertrag',
+    'kuendigungsschreiben',
+    'kindergeldbescheid',
+    'elterngeldbescheid',
+    'rentenauskunft',
+    'versicherungspolice',
+    'wertgutachten',
     'schriftsatz',
     'beschluss',
     'urteil',
     'vollmacht',
+    'korrespondenz_gegner',
+    'korrespondenz_gericht',
     'sonstiges'
 );
+
+-- Dokumentstatus für Slots
+CREATE TYPE slot_status AS ENUM ('fehlend', 'hochgeladen', 'in_pruefung', 'akzeptiert', 'abgelehnt');
+
+-- OCR Status
+CREATE TYPE ocr_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+
+-- Freigabestatus
+CREATE TYPE approval_status AS ENUM ('ausstehend', 'freigegeben', 'abgelehnt', 'kommentiert');
+
+-- Ruleset Status
+CREATE TYPE ruleset_status AS ENUM ('pending', 'active', 'deprecated');
 
 -- Geschlecht
 CREATE TYPE gender AS ENUM ('maennlich', 'weiblich', 'divers');
@@ -510,6 +534,240 @@ CREATE TABLE audit_log (
     user_agent TEXT,
 
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- INVITATIONS TABLE (Einladungscodes für Mandanten) - NEU
+-- =============================================================================
+CREATE TABLE invitations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+
+    -- Code-Hash (nicht im Klartext speichern)
+    code_hash VARCHAR(255) NOT NULL UNIQUE,
+
+    -- Gültigkeit
+    expires_at TIMESTAMPTZ NOT NULL,
+    single_use BOOLEAN DEFAULT true,
+
+    -- Verwendung
+    used_at TIMESTAMPTZ,
+    used_by UUID REFERENCES users(id),
+
+    -- Ersteller
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- CASE_MEMBERSHIPS TABLE (Aktenzuordnung) - NEU
+-- =============================================================================
+CREATE TABLE case_memberships (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    role_in_case VARCHAR(50) NOT NULL, -- 'mandant', 'gegner', 'anwalt', 'sachbearbeiter'
+
+    -- Berechtigungen
+    can_view_documents BOOLEAN DEFAULT true,
+    can_upload_documents BOOLEAN DEFAULT true,
+    can_view_calculations BOOLEAN DEFAULT false,
+    can_approve_drafts BOOLEAN DEFAULT false,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(case_id, user_id)
+);
+
+-- =============================================================================
+-- REQUEST_SLOTS TABLE (Strukturierte Upload-Slots) - NEU
+-- =============================================================================
+CREATE TABLE request_slots (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID NOT NULL REFERENCES document_requests(id) ON DELETE CASCADE,
+
+    slot_type document_type NOT NULL,
+    label VARCHAR(255) NOT NULL, -- z.B. "Gehaltsabrechnung Januar 2026"
+    beschreibung TEXT,
+
+    -- Status
+    status slot_status DEFAULT 'fehlend',
+
+    -- Verknüpfung zum hochgeladenen Dokument
+    document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+
+    -- Reihenfolge
+    sort_order INTEGER DEFAULT 0,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- DRAFTS TABLE (Entwürfe zur Freigabe) - NEU
+-- =============================================================================
+CREATE TABLE drafts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+
+    -- Art des Entwurfs
+    draft_type VARCHAR(50) NOT NULL, -- 'schreiben_mandant', 'schreiben_gegner', 'schriftsatz_gericht'
+    titel VARCHAR(255) NOT NULL,
+
+    -- Inhalt
+    content TEXT NOT NULL,
+    content_html TEXT,
+
+    -- Verknüpfte Berechnung (optional)
+    calculation_id UUID REFERENCES calculations(id) ON DELETE SET NULL,
+
+    -- Anlagen
+    attachments JSONB, -- Array von document_ids
+
+    -- Freigabe-Workflow
+    requires_client_approval BOOLEAN DEFAULT false,
+    approval_status approval_status DEFAULT 'ausstehend',
+
+    -- Ersteller
+    created_by UUID NOT NULL REFERENCES users(id),
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- APPROVALS TABLE (Freigaben/Ablehnungen) - NEU
+-- =============================================================================
+CREATE TABLE approvals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Verknüpfung (einer der folgenden)
+    draft_id UUID REFERENCES drafts(id) ON DELETE CASCADE,
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    calculation_id UUID REFERENCES calculations(id) ON DELETE CASCADE,
+
+    -- Freigabe-Details
+    approved_by UUID NOT NULL REFERENCES users(id),
+    status approval_status NOT NULL,
+    comment TEXT,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Constraint: mindestens eine Verknüpfung erforderlich
+    CONSTRAINT approval_has_entity CHECK (
+        (draft_id IS NOT NULL)::int +
+        (document_id IS NOT NULL)::int +
+        (calculation_id IS NOT NULL)::int = 1
+    )
+);
+
+-- =============================================================================
+-- RULESETS TABLE (OLG-Regelwerke mit Versionierung) - NEU
+-- =============================================================================
+CREATE TABLE rulesets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    olg_name VARCHAR(100) NOT NULL,
+    olg_bezirk VARCHAR(100) NOT NULL,
+    version VARCHAR(20) NOT NULL,
+
+    gueltig_ab DATE NOT NULL,
+    gueltig_bis DATE,
+
+    -- Status
+    status ruleset_status DEFAULT 'pending',
+
+    -- Alle Parameter als JSONB
+    parameters JSONB NOT NULL,
+    -- Struktur:
+    -- {
+    --   "berufsbedingte_aufwendungen": {"pauschal_prozent": 0.05, "minimum": 50, "maximum": 150},
+    --   "altersvorsorge": {"prozent_vom_brutto": 0.04},
+    --   "erwerbstaetigenbonus": 0.10,
+    --   "selbstbehalt": {...},
+    --   "methoden": {...}
+    -- }
+
+    -- Metadaten
+    quelle_url VARCHAR(500),
+    geprueft_von UUID REFERENCES users(id),
+    geprueft_am TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(olg_bezirk, version)
+);
+
+-- =============================================================================
+-- COURT_OLG_MAPPING TABLE (Gericht zu OLG Zuordnung) - NEU
+-- =============================================================================
+CREATE TABLE court_olg_mapping (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    gericht_name VARCHAR(200) NOT NULL,
+    gericht_typ VARCHAR(50) NOT NULL, -- 'AG', 'LG', 'OLG'
+    plz VARCHAR(10),
+    ort VARCHAR(100),
+
+    -- Zuordnung zum OLG-Bezirk
+    olg_bezirk VARCHAR(100) NOT NULL,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(gericht_name, gericht_typ)
+);
+
+-- =============================================================================
+-- OCR_QUEUE TABLE (OCR-Verarbeitungsqueue) - NEU
+-- =============================================================================
+CREATE TABLE ocr_queue (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+
+    status ocr_status DEFAULT 'pending',
+    priority INTEGER DEFAULT 0, -- höher = wichtiger
+
+    -- Verarbeitungsdetails
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+
+    -- Ergebnisse
+    ocr_confidence DECIMAL(5,4), -- 0.0000 bis 1.0000
+    extracted_data JSONB, -- Strukturierte Extraktion
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================================
+-- PAYSLIP_EXTRACTIONS TABLE (Lohnabrechnungs-Extraktion) - NEU
+-- =============================================================================
+CREATE TABLE payslip_extractions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    income_record_id UUID REFERENCES income_records(id) ON DELETE SET NULL,
+
+    -- Extrahierte Rohdaten
+    raw_extraction JSONB NOT NULL,
+
+    -- Confidence pro Feld
+    field_confidence JSONB,
+
+    -- Bestätigung
+    confirmed BOOLEAN DEFAULT false,
+    confirmed_by UUID REFERENCES users(id),
+    confirmed_at TIMESTAMPTZ,
+
+    -- Manuelle Korrekturen
+    manual_corrections JSONB,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- =============================================================================

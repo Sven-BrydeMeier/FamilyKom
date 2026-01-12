@@ -8,7 +8,7 @@ Format: YYYY.MM.DD.HHMM
 from datetime import datetime
 
 # Letzte Aenderung - wird bei jedem Update aktualisiert
-LAST_UPDATE = "2026-01-12 16:45:00"
+LAST_UPDATE = "2026-01-12 18:30:00"
 
 # Hauptversion
 MAJOR_VERSION = 1
@@ -45,6 +45,22 @@ def get_last_update_datetime() -> datetime:
 
 # Aenderungsprotokoll
 CHANGELOG = [
+    {
+        "version": "1.0.20260112.1830",
+        "datum": "12.01.2026",
+        "aenderungen": [
+            "Datenbankschema erweitert gemaess Pflichtenheft",
+            "Neue Tabellen: invitations, case_memberships, request_slots, drafts, approvals",
+            "Neue Tabellen: rulesets, court_olg_mapping, ocr_queue, payslip_extractions",
+            "Calculation Engine Modul mit Versionierung implementiert",
+            "Kindesunterhalt-Rechner mit vollstaendiger Schrittdokumentation",
+            "Ehegattenunterhalt-Rechner mit Differenzmethode und Erwerbstaetigenbonus",
+            "Zugewinnausgleich-Rechner mit VPI-Indexierung",
+            "RVG-Gebuehrenrechner nach Anlage 2 zu § 13 RVG",
+            "OLG-Jurisdiktionslogik fuer Schleswig-Holstein",
+            "Ruleset-Manager fuer OLG-Leitlinien und Duesseldorfer Tabelle",
+        ]
+    },
     {
         "version": "1.0.20260112.1645",
         "datum": "12.01.2026",
