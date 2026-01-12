@@ -2126,7 +2126,8 @@ def show_case_detail():
     st.markdown("---")
 
     # Tabs fuer verschiedene Bereiche
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Beteiligte",
         "Dokumente",
         "Berechnungen",
         "Gehaltsabrechnungen",
@@ -2135,9 +2136,400 @@ def show_case_detail():
     ])
 
     # =====================================================
-    # TAB 1: Dokumentenmanagement
+    # TAB 1: Beteiligte (Gegner, Gerichte, Jugendamt etc.)
     # =====================================================
     with tab1:
+        st.subheader("Beteiligte verwalten")
+
+        from src.data.gerichte import (
+            get_zustaendiges_gericht,
+            get_zustaendiges_jugendamt,
+            get_alle_amtsgerichte,
+            get_alle_jugendaemter,
+            AMTSGERICHTE,
+            OBERLANDESGERICHTE,
+            JUGENDAEMTER
+        )
+
+        # Demo-Beteiligte fuer diese Akte
+        if "case_beteiligte" not in st.session_state:
+            st.session_state.case_beteiligte = {
+                "gegner": {
+                    "vorname": akte.get("gegner", "").split(" ")[0] if akte.get("gegner") else "",
+                    "nachname": akte.get("gegner", "").split(" ")[-1] if akte.get("gegner") else "",
+                    "adresse": "Musterweg 5",
+                    "plz": "24768",
+                    "ort": "Rendsburg",
+                    "telefon": "",
+                    "email": ""
+                },
+                "gegnervertreter": None,
+                "amtsgericht": "ag_rendsburg",
+                "oberlandesgericht": "olg_schleswig",
+                "jugendamt": "ja_rendsburg"
+            }
+
+        beteiligte = st.session_state.case_beteiligte
+
+        # Sub-Tabs fuer verschiedene Beteiligte
+        sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
+            "Gegner & Gegnervertreter",
+            "Gerichte (ZPO)",
+            "Jugendamt",
+            "Weitere Beteiligte"
+        ])
+
+        # ---- Gegner & Gegnervertreter ----
+        with sub_tab1:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### Gegner / Antragsgegner")
+
+                gegner = beteiligte.get("gegner", {})
+
+                g_col1, g_col2 = st.columns(2)
+                with g_col1:
+                    g_vorname = st.text_input("Vorname", value=gegner.get("vorname", ""), key="gegner_vorname")
+                with g_col2:
+                    g_nachname = st.text_input("Nachname", value=gegner.get("nachname", ""), key="gegner_nachname")
+
+                g_adresse = st.text_input("Strasse und Hausnummer", value=gegner.get("adresse", ""), key="gegner_adresse")
+
+                g_col3, g_col4 = st.columns([1, 2])
+                with g_col3:
+                    g_plz = st.text_input("PLZ", value=gegner.get("plz", ""), key="gegner_plz", max_chars=5)
+                with g_col4:
+                    g_ort = st.text_input("Ort", value=gegner.get("ort", ""), key="gegner_ort")
+
+                g_col5, g_col6 = st.columns(2)
+                with g_col5:
+                    g_telefon = st.text_input("Telefon", value=gegner.get("telefon", ""), key="gegner_telefon")
+                with g_col6:
+                    g_email = st.text_input("E-Mail", value=gegner.get("email", ""), key="gegner_email")
+
+                if st.button("Gegner speichern", type="primary", key="save_gegner"):
+                    st.session_state.case_beteiligte["gegner"] = {
+                        "vorname": g_vorname,
+                        "nachname": g_nachname,
+                        "adresse": g_adresse,
+                        "plz": g_plz,
+                        "ort": g_ort,
+                        "telefon": g_telefon,
+                        "email": g_email
+                    }
+                    st.success("Gegnerdaten gespeichert!")
+
+                    # Automatisch Gericht vorschlagen basierend auf PLZ
+                    if g_plz:
+                        gericht = get_zustaendiges_gericht(g_plz)
+                        if gericht:
+                            st.info(f"Vorgeschlagenes Gericht basierend auf PLZ {g_plz}: **{gericht['amtsgericht']['kurzname']}**")
+
+            with col2:
+                st.markdown("#### Gegnervertreter (Rechtsanwalt)")
+
+                gv = beteiligte.get("gegnervertreter") or {}
+
+                hat_vertreter = st.checkbox(
+                    "Gegner ist anwaltlich vertreten",
+                    value=bool(gv),
+                    key="hat_gegnervertreter"
+                )
+
+                if hat_vertreter:
+                    gv_kanzlei = st.text_input("Kanzleiname", value=gv.get("kanzlei", ""), key="gv_kanzlei")
+                    gv_anwalt = st.text_input("Name des Anwalts", value=gv.get("anwalt", ""), key="gv_anwalt")
+                    gv_adresse = st.text_input("Adresse", value=gv.get("adresse", ""), key="gv_adresse")
+
+                    gv_col1, gv_col2 = st.columns([1, 2])
+                    with gv_col1:
+                        gv_plz = st.text_input("PLZ", value=gv.get("plz", ""), key="gv_plz", max_chars=5)
+                    with gv_col2:
+                        gv_ort = st.text_input("Ort", value=gv.get("ort", ""), key="gv_ort")
+
+                    gv_col3, gv_col4 = st.columns(2)
+                    with gv_col3:
+                        gv_telefon = st.text_input("Telefon", value=gv.get("telefon", ""), key="gv_telefon")
+                    with gv_col4:
+                        gv_fax = st.text_input("Fax", value=gv.get("fax", ""), key="gv_fax")
+
+                    gv_email = st.text_input("E-Mail", value=gv.get("email", ""), key="gv_email")
+                    gv_aktenzeichen = st.text_input("Deren Aktenzeichen", value=gv.get("aktenzeichen", ""), key="gv_az")
+
+                    if st.button("Gegnervertreter speichern", type="primary", key="save_gv"):
+                        st.session_state.case_beteiligte["gegnervertreter"] = {
+                            "kanzlei": gv_kanzlei,
+                            "anwalt": gv_anwalt,
+                            "adresse": gv_adresse,
+                            "plz": gv_plz,
+                            "ort": gv_ort,
+                            "telefon": gv_telefon,
+                            "fax": gv_fax,
+                            "email": gv_email,
+                            "aktenzeichen": gv_aktenzeichen
+                        }
+                        st.success("Gegnervertreter gespeichert!")
+                else:
+                    st.info("Gegner ist nicht anwaltlich vertreten oder Vertreter unbekannt.")
+
+        # ---- Gerichte (ZPO) ----
+        with sub_tab2:
+            st.markdown("#### Gerichtliche Zustaendigkeit nach ZPO")
+
+            st.info("""
+            **Oertliche Zustaendigkeit (SS 122 FamFG):**
+            Fuer Ehesachen ist das Familiengericht zustaendig, in dessen Bezirk
+            einer der Ehegatten mit allen gemeinschaftlichen minderjaehrigen Kindern
+            seinen gewoehnlichen Aufenthalt hat.
+            """)
+
+            # PLZ-basierte Vorschlagsfunktion
+            st.markdown("##### Automatische Zustaendigkeitsermittlung")
+
+            ermittlung_col1, ermittlung_col2 = st.columns([2, 1])
+
+            with ermittlung_col1:
+                ermittlung_plz = st.text_input(
+                    "PLZ des Wohnorts (Antragsgegner oder gemeinsame Kinder)",
+                    value=beteiligte.get("gegner", {}).get("plz", ""),
+                    key="ermittlung_plz",
+                    max_chars=5
+                )
+
+            with ermittlung_col2:
+                if st.button("Gericht ermitteln", type="primary", key="ermittle_gericht"):
+                    if ermittlung_plz:
+                        gericht = get_zustaendiges_gericht(ermittlung_plz)
+                        if gericht:
+                            st.session_state.vorgeschlagenes_gericht = gericht
+                            st.success("Zustaendigkeit ermittelt!")
+                    else:
+                        st.warning("Bitte PLZ eingeben")
+
+            # Vorgeschlagenes Gericht anzeigen
+            if st.session_state.get("vorgeschlagenes_gericht"):
+                gericht = st.session_state.vorgeschlagenes_gericht
+                ag = gericht["amtsgericht"]
+                olg = gericht["oberlandesgericht"]
+
+                st.markdown("---")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("##### Zustaendiges Amtsgericht (1. Instanz)")
+                    st.success(f"**{ag['name']}**")
+                    st.write(f"Adresse: {ag['adresse']}")
+                    st.write(f"Telefon: {ag['telefon']}")
+
+                    if st.button("Amtsgericht uebernehmen", key="uebernehme_ag"):
+                        st.session_state.case_beteiligte["amtsgericht"] = gericht["amtsgericht_id"]
+                        st.success("Amtsgericht uebernommen!")
+
+                with col2:
+                    st.markdown("##### Oberlandesgericht (Berufung)")
+                    st.info(f"**{olg['name']}**")
+                    st.write(f"Adresse: {olg['adresse']}")
+                    st.write(f"Telefon: {olg['telefon']}")
+
+                    if st.button("OLG uebernehmen", key="uebernehme_olg"):
+                        st.session_state.case_beteiligte["oberlandesgericht"] = gericht["oberlandesgericht_id"]
+                        st.success("OLG uebernommen!")
+
+                if gericht.get("hinweis"):
+                    st.warning(gericht["hinweis"])
+
+            st.markdown("---")
+
+            # Manuelle Auswahl
+            st.markdown("##### Oder manuelle Auswahl")
+
+            manual_col1, manual_col2 = st.columns(2)
+
+            with manual_col1:
+                ag_optionen = [(ag_id, ag_data["kurzname"]) for ag_id, ag_data in AMTSGERICHTE.items()]
+                ag_namen = [name for _, name in ag_optionen]
+                ag_ids = [id for id, _ in ag_optionen]
+
+                aktuelles_ag = beteiligte.get("amtsgericht", "ag_rendsburg")
+                aktueller_index = ag_ids.index(aktuelles_ag) if aktuelles_ag in ag_ids else 0
+
+                ausgewaehltes_ag = st.selectbox(
+                    "Amtsgericht (Familiengericht)",
+                    ag_namen,
+                    index=aktueller_index,
+                    key="select_ag"
+                )
+
+                # ID ermitteln
+                selected_ag_id = ag_ids[ag_namen.index(ausgewaehltes_ag)]
+                selected_ag_data = AMTSGERICHTE[selected_ag_id]
+
+                st.caption(f"Adresse: {selected_ag_data['adresse']}")
+                st.caption(f"Telefon: {selected_ag_data['telefon']}")
+
+            with manual_col2:
+                olg_optionen = [(olg_id, olg_data["kurzname"]) for olg_id, olg_data in OBERLANDESGERICHTE.items()]
+                olg_namen = [name for _, name in olg_optionen]
+                olg_ids = [id for id, _ in olg_optionen]
+
+                aktuelles_olg = beteiligte.get("oberlandesgericht", "olg_schleswig")
+                aktueller_olg_index = olg_ids.index(aktuelles_olg) if aktuelles_olg in olg_ids else 0
+
+                ausgewaehltes_olg = st.selectbox(
+                    "Oberlandesgericht",
+                    olg_namen,
+                    index=aktueller_olg_index,
+                    key="select_olg"
+                )
+
+                selected_olg_id = olg_ids[olg_namen.index(ausgewaehltes_olg)]
+                selected_olg_data = OBERLANDESGERICHTE[selected_olg_id]
+
+                st.caption(f"Adresse: {selected_olg_data['adresse']}")
+
+            if st.button("Gerichte speichern", type="primary", key="save_gerichte"):
+                st.session_state.case_beteiligte["amtsgericht"] = selected_ag_id
+                st.session_state.case_beteiligte["oberlandesgericht"] = selected_olg_id
+                st.success("Gerichte gespeichert!")
+
+        # ---- Jugendamt ----
+        with sub_tab3:
+            st.markdown("#### Jugendamt")
+
+            st.info("""
+            Das Jugendamt wird in Kindschaftssachen (Sorgerecht, Umgang, Kindesunterhalt)
+            vom Gericht beteiligt und nimmt regelmaessig Stellung.
+            """)
+
+            # Automatische Ermittlung basierend auf Amtsgericht
+            aktuelles_ag = beteiligte.get("amtsgericht", "ag_rendsburg")
+            vorgeschlagenes_ja = get_zustaendiges_jugendamt(aktuelles_ag)
+
+            if vorgeschlagenes_ja:
+                ja_data = vorgeschlagenes_ja["jugendamt"]
+                st.success(f"**Vorgeschlagenes Jugendamt:** {ja_data['name']}")
+                st.write(f"Adresse: {ja_data['adresse']}")
+                st.write(f"Telefon: {ja_data['telefon']}")
+                if ja_data.get("email"):
+                    st.write(f"E-Mail: {ja_data['email']}")
+
+                if st.button("Jugendamt uebernehmen", type="primary", key="uebernehme_ja"):
+                    st.session_state.case_beteiligte["jugendamt"] = vorgeschlagenes_ja["jugendamt_id"]
+                    st.success("Jugendamt uebernommen!")
+
+            st.markdown("---")
+            st.markdown("##### Oder manuelle Auswahl")
+
+            ja_optionen = [(ja_id, ja_data["kurzname"]) for ja_id, ja_data in JUGENDAEMTER.items()]
+            ja_namen = [name for _, name in ja_optionen]
+            ja_ids = [id for id, _ in ja_optionen]
+
+            aktuelles_ja = beteiligte.get("jugendamt", "ja_rendsburg")
+            aktueller_ja_index = ja_ids.index(aktuelles_ja) if aktuelles_ja in ja_ids else 0
+
+            ausgewaehltes_ja = st.selectbox(
+                "Jugendamt",
+                ja_namen,
+                index=aktueller_ja_index,
+                key="select_ja"
+            )
+
+            selected_ja_id = ja_ids[ja_namen.index(ausgewaehltes_ja)]
+            selected_ja_data = JUGENDAEMTER[selected_ja_id]
+
+            st.caption(f"Vollstaendiger Name: {selected_ja_data['name']}")
+            st.caption(f"Adresse: {selected_ja_data['adresse']}")
+            st.caption(f"Telefon: {selected_ja_data['telefon']}")
+
+            if st.button("Jugendamt speichern", type="primary", key="save_ja"):
+                st.session_state.case_beteiligte["jugendamt"] = selected_ja_id
+                st.success("Jugendamt gespeichert!")
+
+        # ---- Weitere Beteiligte ----
+        with sub_tab4:
+            st.markdown("#### Weitere Beteiligte")
+
+            if "weitere_beteiligte" not in st.session_state:
+                st.session_state.weitere_beteiligte = []
+
+            # Neue Beteiligte hinzufuegen
+            with st.expander("Neuen Beteiligten hinzufuegen", expanded=False):
+                wb_typ = st.selectbox(
+                    "Art des Beteiligten",
+                    [
+                        "Verfahrensbeistand",
+                        "Sachverstaendiger",
+                        "Zeuge",
+                        "Gutachter",
+                        "Notar",
+                        "Mediator",
+                        "Sonstiger Beteiligter"
+                    ],
+                    key="wb_typ"
+                )
+
+                wb_col1, wb_col2 = st.columns(2)
+                with wb_col1:
+                    wb_name = st.text_input("Name / Firma", key="wb_name")
+                    wb_adresse = st.text_input("Adresse", key="wb_adresse")
+                with wb_col2:
+                    wb_telefon = st.text_input("Telefon", key="wb_telefon")
+                    wb_email = st.text_input("E-Mail", key="wb_email")
+
+                wb_bemerkung = st.text_area("Bemerkung", key="wb_bemerkung", height=80)
+
+                if st.button("Beteiligten hinzufuegen", type="primary", key="add_wb"):
+                    if wb_name:
+                        neuer_beteiligter = {
+                            "typ": wb_typ,
+                            "name": wb_name,
+                            "adresse": wb_adresse,
+                            "telefon": wb_telefon,
+                            "email": wb_email,
+                            "bemerkung": wb_bemerkung
+                        }
+                        st.session_state.weitere_beteiligte.append(neuer_beteiligter)
+                        st.success(f"{wb_typ} '{wb_name}' wurde hinzugefuegt!")
+                        st.rerun()
+                    else:
+                        st.warning("Bitte mindestens den Namen eingeben.")
+
+            # Vorhandene Beteiligte anzeigen
+            st.markdown("---")
+
+            if st.session_state.weitere_beteiligte:
+                st.markdown("##### Eingetragene Beteiligte")
+
+                for idx, wb in enumerate(st.session_state.weitere_beteiligte):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+
+                    with col1:
+                        st.markdown(f"**{wb['typ']}**")
+                        st.write(wb["name"])
+
+                    with col2:
+                        if wb.get("telefon"):
+                            st.caption(f"Tel: {wb['telefon']}")
+                        if wb.get("email"):
+                            st.caption(f"E-Mail: {wb['email']}")
+                        if wb.get("bemerkung"):
+                            st.caption(f"Bemerkung: {wb['bemerkung']}")
+
+                    with col3:
+                        if st.button("Entfernen", key=f"remove_wb_{idx}"):
+                            st.session_state.weitere_beteiligte.pop(idx)
+                            st.rerun()
+
+                    st.markdown("---")
+            else:
+                st.info("Keine weiteren Beteiligten eingetragen.")
+
+    # =====================================================
+    # TAB 2: Dokumentenmanagement
+    # =====================================================
+    with tab2:
         st.subheader("Dokumentenverwaltung")
 
         # Demo-Dokumente fuer diese Akte
@@ -2547,9 +2939,9 @@ def show_case_detail():
                 st.markdown("---")
 
     # =====================================================
-    # TAB 3: Gehaltsabrechnungen mit OCR-Auswertung
+    # TAB 4: Gehaltsabrechnungen mit OCR-Auswertung
     # =====================================================
-    with tab3:
+    with tab4:
         st.subheader("Gehaltsabrechnungen (OCR-Auswertung)")
 
         # OCR-ausgewertete Gehaltsabrechnungen
@@ -2701,9 +3093,9 @@ def show_case_detail():
             st.success("Daten wurden fuer die Berechnung vorbereitet. Bitte wechseln Sie zum Tab 'Berechnungen'.")
 
     # =====================================================
-    # TAB 4: Schriftsaetze zur Akte
+    # TAB 5: Schriftsaetze zur Akte
     # =====================================================
-    with tab4:
+    with tab5:
         st.subheader("Schriftsaetze zur Akte")
 
         # Demo-Schriftsaetze
@@ -2751,9 +3143,9 @@ def show_case_detail():
             st.rerun()
 
     # =====================================================
-    # TAB 5: Aktenhistorie
+    # TAB 6: Aktenhistorie
     # =====================================================
-    with tab5:
+    with tab6:
         st.subheader("Aktenhistorie")
 
         # Demo-Historie
