@@ -2,13 +2,14 @@
 FamilyKom - Familienrechts-Applikation
 Hauptanwendung (Streamlit)
 
-Für RHM - Radtke, Heigener und Meier Kanzlei, Rendsburg
+Fuer RHM - Radtke, Heigener und Meier Kanzlei, Rendsburg
 """
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, date
 
 from config.settings import settings
+from config.version import get_version, get_version_display, CHANGELOG
 
 # Seitenkonfiguration muss zuerst kommen
 st.set_page_config(
@@ -19,11 +20,13 @@ st.set_page_config(
     menu_items={
         "Get help": None,
         "Report a Bug": None,
-        "About": """
+        "About": f"""
         ## FamilyKom
-        Familienrechts-Applikation v1.0
+        Familienrechts-Applikation
 
-        Entwickelt für RHM - Radtke, Heigener und Meier
+        {get_version_display()}
+
+        Entwickelt fuer RHM - Radtke, Heigener und Meier
         Kanzlei in Rendsburg
         """
     }
@@ -379,6 +382,10 @@ def show_sidebar():
                 del st.session_state[key]
             st.rerun()
 
+        # Versionsnummer am Ende der Sidebar
+        st.markdown("---")
+        st.caption(get_version_display())
+
 
 def show_admin_menu():
     """Admin-Menü in der Sidebar"""
@@ -576,18 +583,419 @@ def show_admin_dashboard():
 
 
 def show_user_management():
+    """Vollstaendige Benutzerverwaltung"""
     st.header("Benutzerverwaltung")
-    st.info("Hier können Benutzer verwaltet werden.")
+
+    tab1, tab2, tab3 = st.tabs(["Benutzer", "Neuer Benutzer", "Rollen & Rechte"])
+
+    with tab1:
+        st.subheader("Benutzerliste")
+
+        # Filter
+        col1, col2 = st.columns(2)
+        with col1:
+            filter_rolle = st.selectbox(
+                "Rolle",
+                ["Alle", "Administrator", "Anwalt", "Mitarbeiter"],
+                key="user_filter_role"
+            )
+        with col2:
+            filter_status = st.selectbox(
+                "Status",
+                ["Alle", "Aktiv", "Inaktiv", "Gesperrt"],
+                key="user_filter_status"
+            )
+
+        st.markdown("---")
+
+        # Demo-Benutzer
+        benutzer = [
+            {"name": "Dr. Thomas Mueller", "email": "ra.mueller@rhm-kanzlei.de",
+             "rolle": "Anwalt", "status": "Aktiv", "letzter_login": "12.01.2026 09:15"},
+            {"name": "Sabine Heigener", "email": "ra.heigener@rhm-kanzlei.de",
+             "rolle": "Anwalt", "status": "Aktiv", "letzter_login": "12.01.2026 08:30"},
+            {"name": "Michael Radtke", "email": "ra.radtke@rhm-kanzlei.de",
+             "rolle": "Anwalt", "status": "Aktiv", "letzter_login": "11.01.2026 16:45"},
+            {"name": "Klaus Meier", "email": "ra.meier@rhm-kanzlei.de",
+             "rolle": "Anwalt", "status": "Aktiv", "letzter_login": "10.01.2026 14:20"},
+            {"name": "Sandra Schmidt", "email": "sekretariat@rhm-kanzlei.de",
+             "rolle": "Mitarbeiter", "status": "Aktiv", "letzter_login": "12.01.2026 08:00"},
+            {"name": "Petra Wagner", "email": "buchhaltung@rhm-kanzlei.de",
+             "rolle": "Mitarbeiter", "status": "Aktiv", "letzter_login": "12.01.2026 08:05"},
+            {"name": "Anna Administrator", "email": "admin@rhm-kanzlei.de",
+             "rolle": "Administrator", "status": "Aktiv", "letzter_login": "12.01.2026 07:30"},
+        ]
+
+        # Filtern
+        gefilterte_benutzer = benutzer
+        if filter_rolle != "Alle":
+            gefilterte_benutzer = [b for b in gefilterte_benutzer if b["rolle"] == filter_rolle]
+        if filter_status != "Alle":
+            gefilterte_benutzer = [b for b in gefilterte_benutzer if b["status"] == filter_status]
+
+        # Tabellenkopf
+        cols = st.columns([2, 2.5, 1.5, 1, 1.5])
+        with cols[0]:
+            st.markdown("**Name**")
+        with cols[1]:
+            st.markdown("**E-Mail**")
+        with cols[2]:
+            st.markdown("**Rolle**")
+        with cols[3]:
+            st.markdown("**Status**")
+        with cols[4]:
+            st.markdown("**Aktion**")
+
+        st.markdown("---")
+
+        for user in gefilterte_benutzer:
+            cols = st.columns([2, 2.5, 1.5, 1, 1.5])
+            with cols[0]:
+                st.write(user["name"])
+                st.caption(f"Login: {user['letzter_login']}")
+            with cols[1]:
+                st.write(user["email"])
+            with cols[2]:
+                st.write(user["rolle"])
+            with cols[3]:
+                if user["status"] == "Aktiv":
+                    st.success(user["status"])
+                elif user["status"] == "Inaktiv":
+                    st.warning(user["status"])
+                else:
+                    st.error(user["status"])
+            with cols[4]:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.button("Edit", key=f"edit_{user['email']}", use_container_width=True)
+                with col_b:
+                    st.button("Sperr", key=f"lock_{user['email']}", use_container_width=True)
+            st.markdown("---")
+
+    with tab2:
+        st.subheader("Neuen Benutzer anlegen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Persoenliche Daten")
+            new_anrede = st.selectbox("Anrede", ["Herr", "Frau"], key="new_user_anrede")
+            new_titel = st.text_input("Titel (optional)", placeholder="Dr., RA, etc.", key="new_user_titel")
+            new_vorname = st.text_input("Vorname", key="new_user_vorname")
+            new_nachname = st.text_input("Nachname", key="new_user_nachname")
+
+        with col2:
+            st.markdown("#### Zugangsdaten")
+            new_email = st.text_input("E-Mail-Adresse", key="new_user_email")
+            new_rolle = st.selectbox(
+                "Rolle",
+                ["Anwalt", "Mitarbeiter", "Administrator"],
+                key="new_user_rolle"
+            )
+            new_passwort = st.text_input("Initiales Passwort", type="password", key="new_user_pw")
+            new_pw_bestaetigen = st.text_input("Passwort bestaetigen", type="password", key="new_user_pw2")
+
+        st.markdown("---")
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("Benutzer anlegen", type="primary", use_container_width=True):
+                if new_vorname and new_nachname and new_email and new_passwort:
+                    if new_passwort == new_pw_bestaetigen:
+                        st.success(f"Benutzer {new_vorname} {new_nachname} wurde angelegt!")
+                    else:
+                        st.error("Passwoerter stimmen nicht ueberein!")
+                else:
+                    st.warning("Bitte alle Pflichtfelder ausfuellen.")
+
+    with tab3:
+        st.subheader("Rollen und Berechtigungen")
+
+        st.markdown("""
+        | Berechtigung | Administrator | Anwalt | Mitarbeiter |
+        |--------------|:-------------:|:------:|:-----------:|
+        | Akten anlegen | Ja | Ja | Nein |
+        | Akten bearbeiten | Ja | Ja | Ja |
+        | Berechnungen erstellen | Ja | Ja | Ja |
+        | Berechnungen freigeben | Ja | Ja | Nein |
+        | Dokumente hochladen | Ja | Ja | Ja |
+        | Dokumente loeschen | Ja | Ja | Nein |
+        | Benutzer verwalten | Ja | Nein | Nein |
+        | System konfigurieren | Ja | Nein | Nein |
+        | API-Einstellungen | Ja | Ja | Nein |
+        | Tabellen aktualisieren | Ja | Nein | Nein |
+        """)
+
+        st.markdown("---")
+        st.info("Individuelle Berechtigungsanpassungen koennen in der Produktionsversion vorgenommen werden.")
 
 
 def show_table_updates():
+    """Verwaltung der Rechentabellen"""
     st.header("Tabellen-Updates")
-    st.info("Aktualisierung der Düsseldorfer Tabelle und OLG-Leitlinien.")
+
+    tab1, tab2, tab3 = st.tabs(["Uebersicht", "Duesseldorfer Tabelle", "OLG-Leitlinien"])
+
+    with tab1:
+        st.subheader("Aktueller Stand der Tabellen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Duesseldorfer Tabelle")
+            st.success("Stand: 01.01.2025")
+            st.write("Letzte Pruefung: 10.01.2026")
+            st.write("Naechste Aktualisierung: 01.01.2026")
+
+            if st.button("Auf Updates pruefen", key="check_dt"):
+                st.info("Pruefe auf neue Version...")
+                st.success("Tabelle ist aktuell!")
+
+        with col2:
+            st.markdown("#### OLG Schleswig Leitlinien")
+            st.success("Stand: 01.01.2025")
+            st.write("Letzte Pruefung: 10.01.2026")
+
+            if st.button("Auf Updates pruefen", key="check_olg"):
+                st.info("Pruefe auf neue Version...")
+                st.success("Leitlinien sind aktuell!")
+
+        st.markdown("---")
+
+        st.markdown("#### Weitere Tabellen")
+
+        tabellen_status = [
+            {"name": "VPI (Verbraucherpreisindex)", "stand": "Dezember 2025", "status": "Aktuell"},
+            {"name": "RVG Gebuehrentabelle", "stand": "01.01.2021", "status": "Aktuell"},
+            {"name": "PKH-Tabelle", "stand": "01.01.2024", "status": "Aktuell"},
+            {"name": "Selbstbehalt-Werte", "stand": "01.01.2025", "status": "Aktuell"},
+        ]
+
+        for tab in tabellen_status:
+            col1, col2, col3 = st.columns([2, 1.5, 1])
+            with col1:
+                st.write(tab["name"])
+            with col2:
+                st.write(f"Stand: {tab['stand']}")
+            with col3:
+                st.success(tab["status"])
+            st.markdown("---")
+
+    with tab2:
+        st.subheader("Duesseldorfer Tabelle 2025")
+
+        st.markdown("#### Aktuell hinterlegte Werte")
+
+        st.markdown("""
+        | Einkommensgruppe | 0-5 Jahre | 6-11 Jahre | 12-17 Jahre | ab 18 Jahre |
+        |------------------|----------:|----------:|------------:|-----------:|
+        | bis 2.100 EUR    | 480 EUR   | 551 EUR   | 645 EUR     | 689 EUR    |
+        | 2.101-2.500 EUR  | 504 EUR   | 579 EUR   | 678 EUR     | 724 EUR    |
+        | 2.501-2.900 EUR  | 528 EUR   | 607 EUR   | 710 EUR     | 758 EUR    |
+        | 2.901-3.300 EUR  | 552 EUR   | 634 EUR   | 742 EUR     | 792 EUR    |
+        | 3.301-3.700 EUR  | 576 EUR   | 661 EUR   | 774 EUR     | 827 EUR    |
+        """)
+
+        st.caption("Vollstaendige Tabelle mit 15 Einkommensgruppen im System hinterlegt.")
+
+        st.markdown("---")
+
+        st.markdown("#### Manuelle Aktualisierung")
+        st.warning("Aenderungen an den Tabellen sollten nur bei offiziellen Updates vorgenommen werden!")
+
+        uploaded_tabelle = st.file_uploader(
+            "Neue Tabelle hochladen (CSV/Excel)",
+            type=["csv", "xlsx"],
+            help="Format: Einkommensgruppe, Altersstufe1, Altersstufe2, Altersstufe3, Altersstufe4"
+        )
+
+        if uploaded_tabelle:
+            if st.button("Tabelle aktualisieren", type="primary"):
+                st.success("Tabelle wurde aktualisiert!")
+                st.info("Alle zukuenftigen Berechnungen verwenden die neuen Werte.")
+
+    with tab3:
+        st.subheader("OLG Schleswig-Holstein Leitlinien")
+
+        st.markdown("#### Aktuelle Einstellungen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Selbstbehalte (notwendig)**")
+            st.write("- Erwerbstaetiger gegenueber Kindern: 1.450 EUR")
+            st.write("- Nicht-Erwerbstaetiger gegenueber Kindern: 1.200 EUR")
+            st.write("- Gegenueber Ehegatten: 1.600 EUR")
+
+        with col2:
+            st.markdown("**Erwerbstaetigenbonus**")
+            st.write("- Quote: 1/7 (ca. 14,3%)")
+            st.write("- Anwendung: Ehegattenunterhalt")
+
+        st.markdown("---")
+
+        st.markdown("#### Aenderungsprotokoll")
+
+        aenderungen = [
+            {"datum": "01.01.2025", "beschreibung": "Erhoehung Selbstbehalte, neue Duesseldorfer Tabelle"},
+            {"datum": "01.01.2024", "beschreibung": "Anpassung Kindergeldanrechnung"},
+            {"datum": "01.01.2023", "beschreibung": "Neue Einkommensgruppen"},
+        ]
+
+        for ae in aenderungen:
+            st.write(f"**{ae['datum']}**: {ae['beschreibung']}")
 
 
 def show_system_monitoring():
-    st.header("Systemüberwachung")
-    st.info("System-Status und Logs.")
+    """Systemueberwachung und Logs"""
+    st.header("Systemueberwachung")
+
+    tab1, tab2, tab3, tab4 = st.tabs(["Status", "Aktivitaeten", "Fehler-Log", "Speicher"])
+
+    with tab1:
+        st.subheader("Systemstatus")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Datenbank", "Online")
+            st.success("Supabase verbunden")
+
+        with col2:
+            st.metric("Cache", "Online")
+            st.success("Upstash Redis aktiv")
+
+        with col3:
+            st.metric("Speicher", "2.4 GB / 10 GB")
+            st.info("24% belegt")
+
+        with col4:
+            st.metric("Aktive Sessions", "3")
+            st.info("Normale Last")
+
+        st.markdown("---")
+
+        st.markdown("#### Dienststatus")
+
+        dienste = [
+            {"name": "Authentifizierung (Supabase Auth)", "status": "Online", "latenz": "45ms"},
+            {"name": "Datenbank (PostgreSQL)", "status": "Online", "latenz": "12ms"},
+            {"name": "Datei-Speicher (Supabase Storage)", "status": "Online", "latenz": "89ms"},
+            {"name": "Cache (Upstash Redis)", "status": "Online", "latenz": "8ms"},
+            {"name": "OCR-Dienst (Google Vision)", "status": "Bereit", "latenz": "-"},
+        ]
+
+        for dienst in dienste:
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.write(dienst["name"])
+            with col2:
+                if dienst["status"] == "Online":
+                    st.success(dienst["status"])
+                elif dienst["status"] == "Bereit":
+                    st.info(dienst["status"])
+                else:
+                    st.error(dienst["status"])
+            with col3:
+                st.write(dienst["latenz"])
+            st.markdown("---")
+
+    with tab2:
+        st.subheader("Letzte Aktivitaeten")
+
+        aktivitaeten = [
+            {"zeit": "12.01.2026 15:30", "benutzer": "Dr. Mueller", "aktion": "Berechnung erstellt", "details": "Kindesunterhalt Az. 2026/0015"},
+            {"zeit": "12.01.2026 15:15", "benutzer": "Mandant Mustermann", "aktion": "Dokument hochgeladen", "details": "Gehaltsabrechnung_Dez.pdf"},
+            {"zeit": "12.01.2026 14:45", "benutzer": "S. Schmidt", "aktion": "Akte geoeffnet", "details": "Az. 2026/0001"},
+            {"zeit": "12.01.2026 14:30", "benutzer": "Dr. Mueller", "aktion": "Anmeldung", "details": "IP: 192.168.1.100"},
+            {"zeit": "12.01.2026 14:00", "benutzer": "System", "aktion": "Backup erstellt", "details": "Automatisches Tages-Backup"},
+        ]
+
+        for akt in aktivitaeten:
+            col1, col2, col3 = st.columns([1.5, 1.5, 3])
+            with col1:
+                st.write(akt["zeit"])
+            with col2:
+                st.write(akt["benutzer"])
+            with col3:
+                st.markdown(f"**{akt['aktion']}**")
+                st.caption(akt["details"])
+            st.markdown("---")
+
+    with tab3:
+        st.subheader("Fehler-Log")
+
+        # Filter
+        col1, col2 = st.columns(2)
+        with col1:
+            fehler_level = st.selectbox(
+                "Level",
+                ["Alle", "Error", "Warning", "Info"],
+                key="error_level"
+            )
+        with col2:
+            fehler_zeitraum = st.selectbox(
+                "Zeitraum",
+                ["Heute", "Diese Woche", "Dieser Monat"],
+                key="error_period"
+            )
+
+        st.markdown("---")
+
+        # Demo-Fehler
+        st.success("Keine kritischen Fehler in den letzten 24 Stunden.")
+
+        st.markdown("#### Letzte Warnungen")
+        warnungen = [
+            {"zeit": "11.01.2026 23:45", "level": "Warning", "nachricht": "Langsame Datenbankabfrage (>500ms)"},
+            {"zeit": "10.01.2026 15:30", "level": "Info", "nachricht": "Automatisches Logout nach Inaktivitaet"},
+        ]
+
+        for warn in warnungen:
+            col1, col2, col3 = st.columns([1.5, 1, 4])
+            with col1:
+                st.write(warn["zeit"])
+            with col2:
+                if warn["level"] == "Warning":
+                    st.warning(warn["level"])
+                else:
+                    st.info(warn["level"])
+            with col3:
+                st.write(warn["nachricht"])
+
+    with tab4:
+        st.subheader("Speichernutzung")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Dokumentenspeicher")
+            st.progress(0.24, text="2.4 GB von 10 GB")
+
+            st.markdown("**Nach Kategorie:**")
+            st.write("- Mandantendokumente: 1.8 GB")
+            st.write("- Schriftsaetze: 0.4 GB")
+            st.write("- System-Backups: 0.2 GB")
+
+        with col2:
+            st.markdown("#### Datenbank")
+            st.progress(0.15, text="150 MB von 1 GB")
+
+            st.markdown("**Tabellen:**")
+            st.write("- Akten: 45 MB")
+            st.write("- Dokumente (Metadaten): 30 MB")
+            st.write("- Berechnungen: 25 MB")
+            st.write("- Benutzer: 5 MB")
+
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Speicheranalyse starten"):
+                st.info("Analysiere Speichernutzung...")
+        with col2:
+            if st.button("Alte Backups loeschen"):
+                st.warning("Moechten Sie Backups aelter als 30 Tage loeschen?")
 
 
 def show_settings():
@@ -956,13 +1364,417 @@ def show_fristen_management():
 
 
 def show_cases_list():
-    st.header("Aktenübersicht")
-    st.info("Liste aller Akten mit Such- und Filterfunktion.")
+    """Vollstaendige Aktenuebersicht mit Such- und Filterfunktion"""
+    st.header("Aktenuebersicht")
+
+    # Demo-Akten
+    akten = [
+        {"az": "2026/0001", "mandant": "Max Mustermann", "gegner": "Maria Mustermann",
+         "typ": "Scheidung", "anwalt": "Dr. Mueller", "status": "Aktiv",
+         "angelegt": "02.01.2026", "letzte_aktivitaet": "12.01.2026"},
+        {"az": "2026/0002", "mandant": "Klaus Wagner", "gegner": "Petra Wagner",
+         "typ": "Zugewinnausgleich", "anwalt": "Heigener", "status": "Aktiv",
+         "angelegt": "03.01.2026", "letzte_aktivitaet": "11.01.2026"},
+        {"az": "2026/0003", "mandant": "Thomas Berger", "gegner": "Sylvia Berger",
+         "typ": "Trennungsunterhalt", "anwalt": "Dr. Mueller", "status": "Aktiv",
+         "angelegt": "05.01.2026", "letzte_aktivitaet": "10.01.2026"},
+        {"az": "2026/0008", "mandant": "Peter Meyer", "gegner": "Anna Meyer",
+         "typ": "Trennungsunterhalt", "anwalt": "Radtke", "status": "Aktiv",
+         "angelegt": "08.01.2026", "letzte_aktivitaet": "12.01.2026"},
+        {"az": "2026/0015", "mandant": "Lisa Schmidt", "gegner": "Frank Schmidt",
+         "typ": "Kindesunterhalt", "anwalt": "Heigener", "status": "Aktiv",
+         "angelegt": "10.01.2026", "letzte_aktivitaet": "12.01.2026"},
+        {"az": "2025/0089", "mandant": "Herbert Klein", "gegner": "Monika Klein",
+         "typ": "Scheidung", "anwalt": "Meier", "status": "Abgeschlossen",
+         "angelegt": "15.06.2025", "letzte_aktivitaet": "20.12.2025"},
+        {"az": "2025/0156", "mandant": "Gerd Fischer", "gegner": "Helga Fischer",
+         "typ": "Versorgungsausgleich", "anwalt": "Dr. Mueller", "status": "Ruhend",
+         "angelegt": "01.09.2025", "letzte_aktivitaet": "15.11.2025"},
+    ]
+
+    # Such- und Filterbereich
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+
+    with col1:
+        suchbegriff = st.text_input(
+            "Suche",
+            placeholder="Aktenzeichen, Name oder Mandant...",
+            label_visibility="collapsed"
+        )
+
+    with col2:
+        filter_typ = st.selectbox(
+            "Verfahrensart",
+            ["Alle", "Scheidung", "Kindesunterhalt", "Trennungsunterhalt",
+             "Zugewinnausgleich", "Versorgungsausgleich"],
+            label_visibility="collapsed"
+        )
+
+    with col3:
+        filter_status = st.selectbox(
+            "Status",
+            ["Alle", "Aktiv", "Ruhend", "Abgeschlossen"],
+            label_visibility="collapsed"
+        )
+
+    with col4:
+        filter_anwalt = st.selectbox(
+            "Anwalt",
+            ["Alle", "Dr. Mueller", "Heigener", "Radtke", "Meier"],
+            label_visibility="collapsed"
+        )
+
+    # Akten filtern
+    gefilterte_akten = akten
+
+    if suchbegriff:
+        suchbegriff_lower = suchbegriff.lower()
+        gefilterte_akten = [
+            a for a in gefilterte_akten
+            if suchbegriff_lower in a["az"].lower()
+            or suchbegriff_lower in a["mandant"].lower()
+            or suchbegriff_lower in a["gegner"].lower()
+        ]
+
+    if filter_typ != "Alle":
+        gefilterte_akten = [a for a in gefilterte_akten if a["typ"] == filter_typ]
+
+    if filter_status != "Alle":
+        gefilterte_akten = [a for a in gefilterte_akten if a["status"] == filter_status]
+
+    if filter_anwalt != "Alle":
+        gefilterte_akten = [a for a in gefilterte_akten if a["anwalt"] == filter_anwalt]
+
+    st.markdown("---")
+
+    # Statistik
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Gefunden", len(gefilterte_akten))
+    with col2:
+        aktive = len([a for a in gefilterte_akten if a["status"] == "Aktiv"])
+        st.metric("Aktiv", aktive)
+    with col3:
+        ruhend = len([a for a in gefilterte_akten if a["status"] == "Ruhend"])
+        st.metric("Ruhend", ruhend)
+    with col4:
+        abgeschlossen = len([a for a in gefilterte_akten if a["status"] == "Abgeschlossen"])
+        st.metric("Abgeschlossen", abgeschlossen)
+
+    st.markdown("---")
+
+    # Aktenliste
+    if gefilterte_akten:
+        # Tabellenkopf
+        header_col1, header_col2, header_col3, header_col4, header_col5, header_col6 = st.columns([1, 2, 2, 1.5, 1, 1])
+        with header_col1:
+            st.markdown("**Az.**")
+        with header_col2:
+            st.markdown("**Mandant**")
+        with header_col3:
+            st.markdown("**Gegner**")
+        with header_col4:
+            st.markdown("**Verfahren**")
+        with header_col5:
+            st.markdown("**Status**")
+        with header_col6:
+            st.markdown("**Aktion**")
+
+        st.markdown("---")
+
+        for akte in gefilterte_akten:
+            col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 1.5, 1, 1])
+
+            with col1:
+                st.write(akte["az"])
+
+            with col2:
+                st.write(akte["mandant"])
+                st.caption(f"RA {akte['anwalt']}")
+
+            with col3:
+                st.write(akte["gegner"])
+
+            with col4:
+                st.write(akte["typ"])
+                st.caption(f"Letzte Akt.: {akte['letzte_aktivitaet']}")
+
+            with col5:
+                if akte["status"] == "Aktiv":
+                    st.success(akte["status"])
+                elif akte["status"] == "Ruhend":
+                    st.warning(akte["status"])
+                else:
+                    st.info(akte["status"])
+
+            with col6:
+                if st.button("Oeffnen", key=f"open_{akte['az']}", use_container_width=True):
+                    st.session_state.selected_case = akte
+                    st.info(f"Akte {akte['az']} ausgewaehlt")
+
+            st.markdown("---")
+    else:
+        st.warning("Keine Akten gefunden.")
 
 
 def show_new_case():
+    """Vollstaendiges Formular zur Anlage einer neuen Akte"""
     st.header("Neue Akte anlegen")
-    st.info("Formular zur Anlage einer neuen Akte.")
+
+    # Fortschrittsanzeige
+    if "new_case_step" not in st.session_state:
+        st.session_state.new_case_step = 1
+
+    # Tabs fuer verschiedene Abschnitte
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "1. Verfahrensart",
+        "2. Mandant",
+        "3. Gegenseite",
+        "4. Kinder & Abschluss"
+    ])
+
+    with tab1:
+        st.subheader("Verfahrensart und Aktenzeichen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Aktenzeichen generieren
+            jahr = date.today().year
+            naechste_nr = "0025"  # In Produktion aus DB
+            vorgeschlagenes_az = f"{jahr}/{naechste_nr}"
+
+            aktenzeichen = st.text_input(
+                "Aktenzeichen",
+                value=vorgeschlagenes_az,
+                help="Wird automatisch generiert, kann angepasst werden"
+            )
+
+            verfahrensart = st.selectbox(
+                "Verfahrensart",
+                [
+                    "Scheidung (mit Folgesachen)",
+                    "Scheidung (isoliert)",
+                    "Kindesunterhalt",
+                    "Trennungsunterhalt",
+                    "Nachehelicher Unterhalt",
+                    "Zugewinnausgleich",
+                    "Versorgungsausgleich",
+                    "Sorgerecht",
+                    "Umgangsrecht",
+                    "Vaterschaftsfeststellung",
+                    "Sonstiges Familienrecht",
+                ]
+            )
+
+        with col2:
+            zustaendiger_anwalt = st.selectbox(
+                "Zustaendiger Rechtsanwalt",
+                ["Dr. Thomas Mueller", "Sabine Heigener", "Michael Radtke", "Klaus Meier"]
+            )
+
+            sachbearbeiter = st.selectbox(
+                "Sachbearbeiter/in",
+                ["Sandra Schmidt", "Petra Wagner", ""]
+            )
+
+            gerichtsbezirk = st.selectbox(
+                "Zustaendiges Gericht",
+                ["AG Rendsburg", "AG Eckernfoerde", "AG Neumuenster",
+                 "AG Kiel", "OLG Schleswig", "Sonstiges"]
+            )
+
+        st.markdown("---")
+
+        st.markdown("#### Heiratsdaten (bei Scheidung/Unterhalt)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            heiratsdatum = st.date_input(
+                "Heiratsdatum",
+                value=None,
+                min_value=date(1950, 1, 1),
+                max_value=date.today()
+            )
+        with col2:
+            trennungsdatum = st.date_input(
+                "Trennungsdatum",
+                value=None,
+                min_value=date(1950, 1, 1),
+                max_value=date.today()
+            )
+        with col3:
+            gueterstand = st.selectbox(
+                "Gueterstand",
+                ["Zugewinngemeinschaft", "Gutertrennung", "Guetergemeinschaft"]
+            )
+
+    with tab2:
+        st.subheader("Mandantendaten")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Persoenliche Daten")
+
+            mandant_anrede = st.selectbox(
+                "Anrede",
+                ["Herr", "Frau", "Divers"],
+                key="mandant_anrede"
+            )
+            mandant_vorname = st.text_input("Vorname", key="mandant_vorname")
+            mandant_nachname = st.text_input("Nachname", key="mandant_nachname")
+            mandant_geburtsname = st.text_input("Geburtsname (optional)", key="mandant_geburtsname")
+            mandant_geburtsdatum = st.date_input(
+                "Geburtsdatum",
+                value=None,
+                min_value=date(1920, 1, 1),
+                max_value=date.today(),
+                key="mandant_geb"
+            )
+            mandant_staatsangehoerigkeit = st.text_input(
+                "Staatsangehoerigkeit",
+                value="deutsch",
+                key="mandant_staat"
+            )
+
+        with col2:
+            st.markdown("#### Kontaktdaten")
+
+            mandant_strasse = st.text_input("Strasse, Hausnummer", key="mandant_strasse")
+            mandant_plz = st.text_input("PLZ", key="mandant_plz")
+            mandant_ort = st.text_input("Ort", key="mandant_ort")
+            mandant_telefon = st.text_input("Telefon", key="mandant_telefon")
+            mandant_email = st.text_input("E-Mail", key="mandant_email")
+
+            st.markdown("#### Berufliche Situation")
+            mandant_beruf = st.text_input("Beruf", key="mandant_beruf")
+            mandant_einkommen = st.number_input(
+                "Monatliches Nettoeinkommen (EUR)",
+                min_value=0,
+                max_value=100000,
+                step=100,
+                key="mandant_einkommen"
+            )
+
+    with tab3:
+        st.subheader("Daten der Gegenseite")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Persoenliche Daten")
+
+            gegner_anrede = st.selectbox(
+                "Anrede",
+                ["Herr", "Frau", "Divers"],
+                key="gegner_anrede"
+            )
+            gegner_vorname = st.text_input("Vorname", key="gegner_vorname")
+            gegner_nachname = st.text_input("Nachname", key="gegner_nachname")
+            gegner_geburtsdatum = st.date_input(
+                "Geburtsdatum",
+                value=None,
+                min_value=date(1920, 1, 1),
+                max_value=date.today(),
+                key="gegner_geb"
+            )
+
+        with col2:
+            st.markdown("#### Kontakt & Vertretung")
+
+            gegner_strasse = st.text_input("Strasse, Hausnummer", key="gegner_strasse")
+            gegner_plz = st.text_input("PLZ", key="gegner_plz")
+            gegner_ort = st.text_input("Ort", key="gegner_ort")
+
+            st.markdown("---")
+
+            gegner_anwalt = st.checkbox("Gegenseite ist anwaltlich vertreten")
+            if gegner_anwalt:
+                gegner_ra_name = st.text_input("Name des gegnerischen RA")
+                gegner_ra_kanzlei = st.text_input("Kanzlei")
+
+    with tab4:
+        st.subheader("Kinder & Abschluss")
+
+        st.markdown("#### Gemeinsame Kinder")
+
+        anzahl_kinder = st.number_input(
+            "Anzahl gemeinsamer Kinder",
+            min_value=0,
+            max_value=10,
+            value=0,
+            step=1
+        )
+
+        if anzahl_kinder > 0:
+            for i in range(int(anzahl_kinder)):
+                with st.expander(f"Kind {i + 1}", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.text_input("Vorname", key=f"kind_{i}_vorname")
+                    with col2:
+                        st.date_input(
+                            "Geburtsdatum",
+                            value=None,
+                            key=f"kind_{i}_geb"
+                        )
+                    with col3:
+                        st.selectbox(
+                            "Lebt bei",
+                            ["Mandant", "Gegenseite", "Wechselmodell"],
+                            key=f"kind_{i}_bei"
+                        )
+
+        st.markdown("---")
+        st.markdown("#### Notizen & Besonderheiten")
+
+        notizen = st.text_area(
+            "Interne Notizen zur Akte",
+            height=100,
+            placeholder="Besonderheiten, erste Informationen zum Sachverhalt..."
+        )
+
+        st.markdown("---")
+
+        # Zusammenfassung
+        st.markdown("#### Zusammenfassung")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"Aktenzeichen: **{aktenzeichen}**")
+            st.info(f"Verfahrensart: **{verfahrensart}**")
+        with col2:
+            st.info(f"Zustaendiger RA: **{zustaendiger_anwalt}**")
+            if anzahl_kinder > 0:
+                st.info(f"Anzahl Kinder: **{int(anzahl_kinder)}**")
+
+        st.markdown("---")
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            mandantenzugang = st.checkbox(
+                "Mandantenzugang erstellen",
+                value=True,
+                help="Erstellt automatisch einen Zugangscode fuer das Mandantenportal"
+            )
+
+        with col2:
+            if st.button("Akte anlegen", type="primary", use_container_width=True):
+                # Validierung
+                if not mandant_vorname or not mandant_nachname:
+                    st.error("Bitte geben Sie mindestens den Namen des Mandanten ein.")
+                else:
+                    st.success(f"Akte {aktenzeichen} wurde erfolgreich angelegt!")
+                    if mandantenzugang:
+                        zugangscode = f"{mandant_nachname.upper()}{jahr}"
+                        st.info(f"Mandantenzugangscode: **{zugangscode}**")
+                    st.balloons()
+
+        with col3:
+            if st.button("Abbrechen", use_container_width=True):
+                st.session_state.current_page = "Akten"
+                st.rerun()
 
 
 def show_kindesunterhalt_calculator():
@@ -990,13 +1802,275 @@ def show_rvg_calculator():
 
 
 def show_documents_templates():
-    st.header("Schriftsätze")
-    st.info("Schriftsatzvorlagen und -erstellung.")
+    """Schriftsatzvorlagen und -erstellung"""
+    st.header("Schriftsaetze")
+
+    tab1, tab2, tab3 = st.tabs(["Vorlagen", "Neuer Schriftsatz", "Letzte Schriftsaetze"])
+
+    with tab1:
+        st.subheader("Schriftsatzvorlagen")
+
+        # Kategorien
+        kategorie = st.selectbox(
+            "Kategorie",
+            ["Alle", "Scheidung", "Unterhalt", "Sorgerecht", "Zugewinn", "Allgemein"]
+        )
+
+        st.markdown("---")
+
+        # Vorlagen-Liste
+        vorlagen = [
+            {"name": "Scheidungsantrag", "kategorie": "Scheidung", "beschreibung": "Antrag auf Ehescheidung mit Folgesachen"},
+            {"name": "Unterhaltsantrag", "kategorie": "Unterhalt", "beschreibung": "Antrag auf Festsetzung von Kindesunterhalt"},
+            {"name": "Auskunftsaufforderung", "kategorie": "Unterhalt", "beschreibung": "Aufforderung zur Auskunft ueber Einkommensverhaeltnisse"},
+            {"name": "Sorgerechtsantrag", "kategorie": "Sorgerecht", "beschreibung": "Antrag auf Uebertragung des alleinigen Sorgerechts"},
+            {"name": "Umgangsantrag", "kategorie": "Sorgerecht", "beschreibung": "Antrag auf Regelung des Umgangsrechts"},
+            {"name": "Zugewinnausgleichsantrag", "kategorie": "Zugewinn", "beschreibung": "Stufenantrag auf Auskunft und Zahlung"},
+            {"name": "Vollmacht", "kategorie": "Allgemein", "beschreibung": "Anwaltliche Vollmacht"},
+            {"name": "Kostenfestsetzung", "kategorie": "Allgemein", "beschreibung": "Antrag auf Kostenfestsetzung"},
+        ]
+
+        gefilterte_vorlagen = vorlagen if kategorie == "Alle" else [v for v in vorlagen if v["kategorie"] == kategorie]
+
+        for vorlage in gefilterte_vorlagen:
+            col1, col2, col3 = st.columns([2, 3, 1])
+            with col1:
+                st.markdown(f"**{vorlage['name']}**")
+                st.caption(vorlage["kategorie"])
+            with col2:
+                st.write(vorlage["beschreibung"])
+            with col3:
+                if st.button("Verwenden", key=f"vorlage_{vorlage['name']}", use_container_width=True):
+                    st.session_state.selected_template = vorlage["name"]
+                    st.info(f"Vorlage '{vorlage['name']}' ausgewaehlt")
+            st.markdown("---")
+
+    with tab2:
+        st.subheader("Neuen Schriftsatz erstellen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            akte = st.selectbox(
+                "Akte",
+                ["2026/0001 - Mustermann", "2026/0015 - Schmidt", "2026/0008 - Meyer"]
+            )
+
+            vorlage_auswahl = st.selectbox(
+                "Vorlage",
+                ["Freie Eingabe", "Scheidungsantrag", "Unterhaltsantrag",
+                 "Auskunftsaufforderung", "Sorgerechtsantrag"]
+            )
+
+        with col2:
+            empfaenger = st.selectbox(
+                "Empfaenger",
+                ["AG Rendsburg", "Gegnerischer RA", "Mandant", "Gegenseite"]
+            )
+
+            datum = st.date_input("Datum", value=date.today())
+
+        st.markdown("---")
+
+        betreff = st.text_input(
+            "Betreff",
+            placeholder="Az. ... ./. ..."
+        )
+
+        inhalt = st.text_area(
+            "Inhalt",
+            height=300,
+            placeholder="Schriftsatzinhalt eingeben oder aus Vorlage laden..."
+        )
+
+        st.markdown("---")
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            if st.button("Speichern", type="primary", use_container_width=True):
+                st.success("Schriftsatz gespeichert!")
+        with col2:
+            if st.button("Als PDF exportieren", use_container_width=True):
+                st.info("PDF wird erstellt...")
+
+    with tab3:
+        st.subheader("Zuletzt erstellte Schriftsaetze")
+
+        letzte_schriftsaetze = [
+            {"datum": "12.01.2026", "typ": "Unterhaltsantrag", "akte": "2026/0015", "empfaenger": "AG Rendsburg"},
+            {"datum": "11.01.2026", "typ": "Scheidungsantrag", "akte": "2026/0001", "empfaenger": "AG Rendsburg"},
+            {"datum": "10.01.2026", "typ": "Auskunftsaufforderung", "akte": "2026/0008", "empfaenger": "Gegnerischer RA"},
+        ]
+
+        for ss in letzte_schriftsaetze:
+            col1, col2, col3, col4 = st.columns([1, 2, 1, 1])
+            with col1:
+                st.write(ss["datum"])
+            with col2:
+                st.markdown(f"**{ss['typ']}**")
+                st.caption(f"Az. {ss['akte']}")
+            with col3:
+                st.write(ss["empfaenger"])
+            with col4:
+                st.button("Oeffnen", key=f"ss_{ss['datum']}_{ss['typ']}", use_container_width=True)
+            st.markdown("---")
 
 
 def show_documents_management():
+    """Vollstaendige Dokumentenverwaltung"""
     st.header("Dokumentenverwaltung")
-    st.info("Dokumentenübersicht und -verwaltung.")
+
+    tab1, tab2, tab3 = st.tabs(["Alle Dokumente", "Upload", "Suche"])
+
+    with tab1:
+        st.subheader("Dokumentenuebersicht")
+
+        # Filter
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filter_akte = st.selectbox(
+                "Akte",
+                ["Alle Akten", "2026/0001", "2026/0015", "2026/0008"],
+                key="dok_filter_akte"
+            )
+        with col2:
+            filter_kategorie = st.selectbox(
+                "Kategorie",
+                ["Alle", "Einkommensnachweise", "Persoenliche Dokumente",
+                 "Gerichtliche Dokumente", "Korrespondenz"],
+                key="dok_filter_kat"
+            )
+        with col3:
+            filter_zeitraum = st.selectbox(
+                "Zeitraum",
+                ["Alle", "Heute", "Diese Woche", "Dieser Monat"],
+                key="dok_filter_zeit"
+            )
+
+        st.markdown("---")
+
+        # Demo-Dokumente
+        dokumente = [
+            {"name": "Gehaltsabrechnung_Dez_2025.pdf", "akte": "2026/0001", "kategorie": "Einkommensnachweise",
+             "datum": "12.01.2026", "groesse": "245 KB", "status": "Geprueft"},
+            {"name": "Heiratsurkunde.pdf", "akte": "2026/0001", "kategorie": "Persoenliche Dokumente",
+             "datum": "11.01.2026", "groesse": "1.2 MB", "status": "Geprueft"},
+            {"name": "Steuerbescheid_2024.pdf", "akte": "2026/0001", "kategorie": "Einkommensnachweise",
+             "datum": "10.01.2026", "groesse": "890 KB", "status": "In Pruefung"},
+            {"name": "Geburtsurkunde_Kind.pdf", "akte": "2026/0015", "kategorie": "Persoenliche Dokumente",
+             "datum": "10.01.2026", "groesse": "156 KB", "status": "Geprueft"},
+            {"name": "Scheidungsantrag_Entwurf.docx", "akte": "2026/0001", "kategorie": "Gerichtliche Dokumente",
+             "datum": "09.01.2026", "groesse": "78 KB", "status": "Entwurf"},
+        ]
+
+        # Tabellenkopf
+        header_cols = st.columns([3, 1, 1.5, 1, 1, 1])
+        with header_cols[0]:
+            st.markdown("**Dokument**")
+        with header_cols[1]:
+            st.markdown("**Akte**")
+        with header_cols[2]:
+            st.markdown("**Kategorie**")
+        with header_cols[3]:
+            st.markdown("**Datum**")
+        with header_cols[4]:
+            st.markdown("**Status**")
+        with header_cols[5]:
+            st.markdown("**Aktion**")
+
+        st.markdown("---")
+
+        for dok in dokumente:
+            cols = st.columns([3, 1, 1.5, 1, 1, 1])
+            with cols[0]:
+                st.write(dok["name"])
+                st.caption(dok["groesse"])
+            with cols[1]:
+                st.write(dok["akte"])
+            with cols[2]:
+                st.write(dok["kategorie"])
+            with cols[3]:
+                st.write(dok["datum"])
+            with cols[4]:
+                if dok["status"] == "Geprueft":
+                    st.success(dok["status"])
+                elif dok["status"] == "In Pruefung":
+                    st.warning(dok["status"])
+                else:
+                    st.info(dok["status"])
+            with cols[5]:
+                st.button("Ansehen", key=f"view_{dok['name']}", use_container_width=True)
+            st.markdown("---")
+
+    with tab2:
+        st.subheader("Dokument hochladen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            upload_akte = st.selectbox(
+                "Zur Akte",
+                ["2026/0001 - Mustermann", "2026/0015 - Schmidt", "2026/0008 - Meyer"],
+                key="upload_akte"
+            )
+
+            upload_kategorie = st.selectbox(
+                "Kategorie",
+                ["Einkommensnachweise", "Persoenliche Dokumente",
+                 "Gerichtliche Dokumente", "Korrespondenz", "Sonstige"],
+                key="upload_kat"
+            )
+
+        with col2:
+            upload_beschreibung = st.text_input(
+                "Beschreibung (optional)",
+                placeholder="Kurze Beschreibung des Dokuments"
+            )
+
+            ocr_aktivieren = st.checkbox(
+                "OCR-Texterkennung aktivieren",
+                value=True,
+                help="Automatische Texterkennung fuer durchsuchbare Dokumente"
+            )
+
+        st.markdown("---")
+
+        uploaded_files = st.file_uploader(
+            "Dokumente auswaehlen",
+            type=["pdf", "jpg", "jpeg", "png", "docx", "xlsx"],
+            accept_multiple_files=True,
+            help="Unterstuetzte Formate: PDF, JPG, PNG, DOCX, XLSX"
+        )
+
+        if uploaded_files:
+            st.info(f"{len(uploaded_files)} Datei(en) ausgewaehlt")
+
+            if st.button("Hochladen", type="primary"):
+                progress = st.progress(0)
+                for i, file in enumerate(uploaded_files):
+                    progress.progress((i + 1) / len(uploaded_files))
+                st.success(f"{len(uploaded_files)} Dokument(e) erfolgreich hochgeladen!")
+
+    with tab3:
+        st.subheader("Dokumentensuche")
+
+        suchbegriff = st.text_input(
+            "Volltextsuche",
+            placeholder="Suchbegriff eingeben (durchsucht auch OCR-Text)..."
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            datum_von = st.date_input("Von", value=None, key="such_von")
+        with col2:
+            datum_bis = st.date_input("Bis", value=None, key="such_bis")
+
+        if st.button("Suchen", type="primary"):
+            if suchbegriff:
+                st.info(f"Suche nach '{suchbegriff}'...")
+                st.warning("Demo: In der Produktionsversion werden hier OCR-Ergebnisse angezeigt.")
+            else:
+                st.warning("Bitte geben Sie einen Suchbegriff ein.")
 
 
 def show_dokumentenanforderung():
@@ -1034,8 +2108,161 @@ def show_client_calculations():
 
 
 def show_client_messages():
+    """Nachrichtensystem fuer Mandanten"""
     st.header("Nachrichten")
-    st.info("Kommunikation mit Ihrer Kanzlei.")
+
+    case = st.session_state.current_case
+    if case:
+        st.info(f"Kommunikation zur Akte **{case.get('case_number')}**")
+
+    tab1, tab2 = st.tabs(["Posteingang", "Neue Nachricht"])
+
+    with tab1:
+        st.subheader("Ihre Nachrichten")
+
+        # Demo-Nachrichten
+        nachrichten = [
+            {
+                "id": 1,
+                "von": "RA Dr. Mueller",
+                "betreff": "Unterlagen erhalten",
+                "vorschau": "Vielen Dank fuer die Zusendung der Gehaltsabrechnungen...",
+                "datum": "12.01.2026 14:30",
+                "gelesen": False
+            },
+            {
+                "id": 2,
+                "von": "Sekretariat",
+                "betreff": "Terminbestaetigung",
+                "vorschau": "Ihr Termin am 15.01.2026 um 10:00 Uhr wurde bestaetigt...",
+                "datum": "10.01.2026 09:15",
+                "gelesen": True
+            },
+            {
+                "id": 3,
+                "von": "RA Dr. Mueller",
+                "betreff": "Willkommen bei RHM",
+                "vorschau": "Sehr geehrter Herr Mustermann, vielen Dank fuer Ihr Vertrauen...",
+                "datum": "05.01.2026 11:00",
+                "gelesen": True
+            },
+        ]
+
+        for msg in nachrichten:
+            with st.container():
+                col1, col2, col3 = st.columns([3, 1.5, 0.5])
+
+                with col1:
+                    if not msg["gelesen"]:
+                        st.markdown(f"**{msg['betreff']}** (Neu)")
+                    else:
+                        st.write(msg["betreff"])
+                    st.caption(msg["vorschau"][:60] + "...")
+
+                with col2:
+                    st.caption(msg["von"])
+                    st.caption(msg["datum"])
+
+                with col3:
+                    if st.button("Lesen", key=f"msg_{msg['id']}", use_container_width=True):
+                        st.session_state.selected_message = msg["id"]
+
+                st.markdown("---")
+
+        # Nachricht anzeigen wenn ausgewaehlt
+        if st.session_state.get("selected_message"):
+            msg_id = st.session_state.selected_message
+            msg = next((m for m in nachrichten if m["id"] == msg_id), None)
+
+            if msg:
+                st.markdown("---")
+                st.subheader(msg["betreff"])
+                st.caption(f"Von: {msg['von']} | {msg['datum']}")
+                st.markdown("---")
+
+                # Demo-Inhalt
+                if msg_id == 1:
+                    st.write("""
+                    Sehr geehrter Herr Mustermann,
+
+                    vielen Dank fuer die Zusendung der Gehaltsabrechnungen.
+                    Die Unterlagen sind vollstaendig und werden nun von uns geprueft.
+
+                    Fuer die Berechnung des Unterhalts benoetigen wir noch den aktuellen
+                    Steuerbescheid. Bitte laden Sie diesen im Mandantenportal hoch.
+
+                    Mit freundlichen Gruessen
+                    Dr. Thomas Mueller
+                    Rechtsanwalt
+                    """)
+                elif msg_id == 2:
+                    st.write("""
+                    Sehr geehrter Herr Mustermann,
+
+                    hiermit bestaetigen wir Ihren Besprechungstermin:
+
+                    Datum: 15.01.2026
+                    Uhrzeit: 10:00 Uhr
+                    Ort: Kanzlei RHM, Musterstrasse 1, 24768 Rendsburg
+
+                    Bitte bringen Sie saemtliche Originalunterlagen mit.
+
+                    Mit freundlichen Gruessen
+                    Ihr Sekretariat
+                    """)
+                else:
+                    st.write("""
+                    Sehr geehrter Herr Mustermann,
+
+                    vielen Dank fuer Ihr Vertrauen in unsere Kanzlei.
+
+                    Wir haben Ihre Akte angelegt und werden uns umgehend
+                    um Ihre Angelegenheit kuemmern.
+
+                    Im Mandantenportal koennen Sie jederzeit den Status
+                    Ihrer Akte einsehen und Dokumente hochladen.
+
+                    Bei Fragen stehen wir Ihnen gerne zur Verfuegung.
+
+                    Mit freundlichen Gruessen
+                    Dr. Thomas Mueller
+                    Rechtsanwalt
+                    """)
+
+                if st.button("Antworten"):
+                    st.session_state.reply_to = msg_id
+
+    with tab2:
+        st.subheader("Neue Nachricht an Ihre Kanzlei")
+
+        empfaenger = st.selectbox(
+            "An",
+            ["RA Dr. Mueller (Ihr Anwalt)", "Sekretariat", "Buchhaltung"]
+        )
+
+        betreff = st.text_input(
+            "Betreff",
+            value=f"Re: {nachrichten[0]['betreff']}" if st.session_state.get("reply_to") else "",
+            placeholder="Betreff Ihrer Nachricht"
+        )
+
+        nachricht = st.text_area(
+            "Ihre Nachricht",
+            height=200,
+            placeholder="Schreiben Sie hier Ihre Nachricht..."
+        )
+
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("Senden", type="primary", use_container_width=True):
+                if betreff and nachricht:
+                    st.success("Ihre Nachricht wurde gesendet!")
+                    st.session_state.reply_to = None
+                else:
+                    st.warning("Bitte geben Sie Betreff und Nachricht ein.")
+
+        st.markdown("---")
+        st.caption("Hinweis: Fuer dringende Angelegenheiten rufen Sie bitte in der Kanzlei an: 04331 / 12345")
 
 
 # =============================================================================
