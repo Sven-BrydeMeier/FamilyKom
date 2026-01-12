@@ -149,18 +149,26 @@ def render_mandant_dashboard():
             """)
 
         # Buttons fuer jedes angeforderte Dokument
-        st.markdown("#### Schnellzugriff:")
+        st.markdown("#### Schnellzugriff - Jetzt hochladen:")
 
-        cols = st.columns(min(len(offene_anforderungen), 3))
+        for anf in offene_anforderungen:
+            col1, col2, col3 = st.columns([3, 1, 1])
 
-        for idx, anf in enumerate(offene_anforderungen):
-            col_idx = idx % 3
-            with cols[col_idx]:
-                prioritaet_icon = "!!!" if anf.get("prioritaet") == "hoch" else ""
+            with col1:
+                prioritaet_icon = "DRINGEND: " if anf.get("prioritaet") == "hoch" else ""
+                st.markdown(f"**{prioritaet_icon}{anf['dokument_name']}**")
+                st.caption(anf.get("beschreibung", "")[:80] + "...")
 
+            with col2:
+                if anf.get("prioritaet") == "hoch":
+                    st.error(f"Frist: {anf['frist']}")
+                else:
+                    st.warning(f"Frist: {anf['frist']}")
+
+            with col3:
                 if st.button(
-                    f"{prioritaet_icon} {anf['dokument_name']}",
-                    key=f"quick_upload_{anf['id']}",
+                    "Hochladen",
+                    key=f"dashboard_quick_{anf['id']}",
                     use_container_width=True,
                     type="primary" if anf.get("prioritaet") == "hoch" else "secondary"
                 ):
@@ -168,9 +176,7 @@ def render_mandant_dashboard():
                     st.session_state.current_page = "Dokumente hochladen"
                     st.rerun()
 
-                st.caption(f"Frist: {anf['frist']}")
-
-        st.markdown("---")
+            st.markdown("")
 
     # Uebersicht Boxen
     col1, col2, col3 = st.columns(3)

@@ -1410,17 +1410,456 @@ def show_lawyer_dashboard():
 
     st.markdown("---")
 
-    col1, col2 = st.columns(2)
+    # Tabs fuer verschiedene Dashboard-Bereiche
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Uebersicht",
+        "Schnellzugriff Aktenanlage",
+        "Daten-Import",
+        "Dokumentenverarbeitung"
+    ])
 
-    with col1:
-        st.subheader("Naechste Termine")
-        st.info("15.01.2026 10:00 - AG Rendsburg, Az. 2026/0001")
-        st.info("17.01.2026 14:30 - Mandantentermin Mustermann")
+    with tab1:
+        col1, col2 = st.columns(2)
 
-    with col2:
-        st.subheader("Letzte Aktivitaeten")
-        st.success("Dokument hochgeladen: Einkommensnachweis (Az. 2026/0015)")
-        st.success("Berechnung erstellt: Kindesunterhalt (Az. 2026/0008)")
+        with col1:
+            st.subheader("Naechste Termine")
+            st.info("15.01.2026 10:00 - AG Rendsburg, Az. 2026/0001")
+            st.info("17.01.2026 14:30 - Mandantentermin Mustermann")
+
+        with col2:
+            st.subheader("Letzte Aktivitaeten")
+            st.success("Dokument hochgeladen: Einkommensnachweis (Az. 2026/0015)")
+            st.success("Berechnung erstellt: Kindesunterhalt (Az. 2026/0008)")
+
+    # =====================================================
+    # TAB 2: Schnellzugriff Aktenanlage
+    # =====================================================
+    with tab2:
+        st.subheader("Neue Akte anlegen")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Automatische Aktenzeichen-Generierung
+            st.markdown("#### Automatisches Aktenzeichen")
+
+            # Aktuelles Jahr und naechste Nummer ermitteln (Demo)
+            from datetime import date
+            jahr = date.today().year
+            letzte_nummer = 24  # In Produktion aus DB
+            naechste_nummer = letzte_nummer + 1
+
+            # Verschiedene Formate zur Auswahl
+            az_format = st.radio(
+                "Aktenzeichen-Format",
+                [
+                    f"{jahr}/{naechste_nummer:04d}",
+                    f"{jahr}-{naechste_nummer:04d}",
+                    f"RHM-{jahr}-{naechste_nummer:04d}",
+                    "Manuell eingeben"
+                ],
+                horizontal=False,
+                key="az_format_dash"
+            )
+
+            if az_format == "Manuell eingeben":
+                manuelles_az = st.text_input(
+                    "Aktenzeichen eingeben",
+                    placeholder="z.B. 2026/0025",
+                    key="manuelles_az_dash"
+                )
+                vorgeschlagenes_az = manuelles_az if manuelles_az else f"{jahr}/{naechste_nummer:04d}"
+            else:
+                vorgeschlagenes_az = az_format
+
+            st.success(f"Naechstes Aktenzeichen: **{vorgeschlagenes_az}**")
+
+        with col2:
+            st.markdown("#### Schnellanlage")
+
+            verfahrensart = st.selectbox(
+                "Verfahrensart",
+                [
+                    "Scheidung (mit Folgesachen)",
+                    "Scheidung (isoliert)",
+                    "Kindesunterhalt",
+                    "Trennungsunterhalt",
+                    "Nachehelicher Unterhalt",
+                    "Zugewinnausgleich",
+                    "Versorgungsausgleich",
+                    "Sorgerecht",
+                    "Umgangsrecht",
+                ],
+                key="schnell_verfahren"
+            )
+
+            mandant_name = st.text_input(
+                "Mandantenname",
+                placeholder="Vorname Nachname",
+                key="schnell_mandant"
+            )
+
+            gegner_name = st.text_input(
+                "Gegnername",
+                placeholder="Vorname Nachname",
+                key="schnell_gegner"
+            )
+
+            if st.button("Akte schnell anlegen", type="primary", use_container_width=True, key="schnell_anlegen"):
+                if mandant_name:
+                    st.success(f"Akte {vorgeschlagenes_az} fuer {mandant_name} wurde angelegt!")
+                    st.info("Sie werden zur Aktendetailseite weitergeleitet...")
+                else:
+                    st.warning("Bitte geben Sie mindestens den Mandantennamen ein.")
+
+        st.markdown("---")
+
+        # Zur vollstaendigen Aktenanlage
+        if st.button("Zur ausfuehrlichen Aktenanlage", use_container_width=True):
+            st.session_state.current_page = "Neue Akte"
+            st.rerun()
+
+    # =====================================================
+    # TAB 3: Daten-Import
+    # =====================================================
+    with tab3:
+        st.subheader("Daten importieren")
+
+        import_col1, import_col2 = st.columns(2)
+
+        with import_col1:
+            st.markdown("#### Import aus RA-MICRO")
+            st.markdown("""
+            Importieren Sie Akten und Dokumente direkt aus RA-MICRO.
+            Das System erkennt automatisch die Aktenstruktur.
+            """)
+
+            ra_micro_file = st.file_uploader(
+                "RA-MICRO Export-Datei hochladen",
+                type=["xml", "zip", "rar"],
+                key="ra_micro_import",
+                help="Unterstuetzte Formate: XML-Export, ZIP-Archiv"
+            )
+
+            if ra_micro_file:
+                st.info(f"Datei: {ra_micro_file.name} ({ra_micro_file.size / 1024:.1f} KB)")
+
+                with st.expander("Import-Optionen"):
+                    import_mandanten = st.checkbox("Mandantendaten importieren", value=True)
+                    import_akten = st.checkbox("Akten importieren", value=True)
+                    import_dokumente = st.checkbox("Dokumente importieren", value=True)
+                    import_fristen = st.checkbox("Fristen importieren", value=True)
+
+                if st.button("RA-MICRO Import starten", type="primary", key="start_ra_micro"):
+                    with st.spinner("Importiere Daten aus RA-MICRO..."):
+                        import time
+                        time.sleep(2)
+                    st.success("""
+                    Import erfolgreich!
+
+                    - 12 Akten importiert
+                    - 45 Dokumente importiert
+                    - 8 Fristen importiert
+                    """)
+
+            st.markdown("---")
+
+            st.markdown("#### Import aus SIP-Dateien")
+            st.markdown("""
+            SIP (Submission Information Package) Dateien aus
+            Gerichtsakten oder anderen Quellen importieren.
+            """)
+
+            sip_files = st.file_uploader(
+                "SIP-Dateien hochladen",
+                type=["sip", "zip", "tar"],
+                accept_multiple_files=True,
+                key="sip_import"
+            )
+
+            if sip_files:
+                st.info(f"{len(sip_files)} Datei(en) ausgewaehlt")
+
+                if st.button("SIP-Import starten", type="primary", key="start_sip"):
+                    with st.spinner("Verarbeite SIP-Dateien..."):
+                        import time
+                        time.sleep(2)
+                    st.success("SIP-Import abgeschlossen!")
+
+        with import_col2:
+            st.markdown("#### Import aus Cloud-Ordnern")
+            st.markdown("""
+            Verbinden Sie Cloud-Speicher und importieren Sie
+            Dokumente automatisch.
+            """)
+
+            cloud_provider = st.selectbox(
+                "Cloud-Anbieter",
+                ["-- Bitte waehlen --", "Microsoft OneDrive", "Google Drive", "Dropbox", "Nextcloud", "WebDAV"],
+                key="cloud_provider"
+            )
+
+            if cloud_provider != "-- Bitte waehlen --":
+                if cloud_provider == "Nextcloud" or cloud_provider == "WebDAV":
+                    cloud_url = st.text_input(
+                        "Server-URL",
+                        placeholder="https://cloud.example.com",
+                        key="cloud_url"
+                    )
+                else:
+                    cloud_url = None
+
+                cloud_folder = st.text_input(
+                    "Ordnerpfad",
+                    placeholder="/Kanzlei/Akten/Import",
+                    key="cloud_folder"
+                )
+
+                sync_options = st.multiselect(
+                    "Synchronisationsoptionen",
+                    ["Automatisch synchronisieren", "Nur neue Dateien", "Unterordner einbeziehen", "Nach Import loeschen"],
+                    default=["Nur neue Dateien", "Unterordner einbeziehen"],
+                    key="sync_options"
+                )
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button("Verbindung testen", use_container_width=True, key="test_cloud"):
+                        with st.spinner("Teste Verbindung..."):
+                            import time
+                            time.sleep(1)
+                        st.success("Verbindung erfolgreich!")
+                with col_b:
+                    if st.button("Cloud-Import starten", type="primary", use_container_width=True, key="start_cloud"):
+                        with st.spinner("Importiere aus Cloud..."):
+                            import time
+                            time.sleep(2)
+                        st.success("23 Dokumente aus Cloud importiert!")
+
+            st.markdown("---")
+
+            st.markdown("#### Massenimport per Ordner")
+            st.markdown("""
+            Laden Sie mehrere Dokumente auf einmal hoch.
+            Das System erkennt automatisch Aktenzeichen
+            aus Dateinamen und Inhalten.
+            """)
+
+            mass_files = st.file_uploader(
+                "Dokumente hochladen",
+                type=["pdf", "jpg", "jpeg", "png", "tiff", "docx", "xlsx"],
+                accept_multiple_files=True,
+                key="mass_import"
+            )
+
+            if mass_files:
+                st.info(f"{len(mass_files)} Datei(en) ausgewaehlt")
+
+                auto_assign = st.checkbox(
+                    "Automatische Aktenzuordnung versuchen",
+                    value=True,
+                    key="auto_assign"
+                )
+
+                if st.button("Dokumente importieren", type="primary", key="start_mass"):
+                    with st.spinner("Verarbeite Dokumente..."):
+                        import time
+                        time.sleep(2)
+                    st.success(f"{len(mass_files)} Dokumente wurden importiert!")
+
+    # =====================================================
+    # TAB 4: Dokumentenverarbeitung
+    # =====================================================
+    with tab4:
+        st.subheader("Intelligente Dokumentenverarbeitung")
+
+        doc_col1, doc_col2 = st.columns(2)
+
+        with doc_col1:
+            st.markdown("#### Intelligente Dokumententrennung")
+            st.markdown("""
+            Laden Sie ein grosses PDF mit mehreren Dokumenten hoch.
+            Das System erkennt automatisch:
+            - Dokumentgrenzen
+            - Zusammengehoerige Schriftsaetze
+            - Anlagen und Hauptdokumente
+            """)
+
+            split_file = st.file_uploader(
+                "Zusammengefuegtes Dokument hochladen",
+                type=["pdf"],
+                key="split_upload"
+            )
+
+            if split_file:
+                st.info(f"Datei: {split_file.name} ({split_file.size / 1024 / 1024:.1f} MB)")
+
+                trennungs_methode = st.selectbox(
+                    "Trennungsmethode",
+                    [
+                        "Automatisch (KI-gestuetzt)",
+                        "Nach Leerseiten",
+                        "Nach Seitenzahl",
+                        "Nach Barcode/QR-Code",
+                        "Nach Textmuster"
+                    ],
+                    key="trenn_methode"
+                )
+
+                if trennungs_methode == "Nach Seitenzahl":
+                    seiten_pro_dok = st.number_input(
+                        "Seiten pro Dokument",
+                        min_value=1,
+                        value=1,
+                        key="seiten_pro_dok"
+                    )
+                elif trennungs_methode == "Nach Textmuster":
+                    textmuster = st.text_input(
+                        "Trennungsmuster (RegEx)",
+                        placeholder="z.B. ^Aktenzeichen:|^Az\\.:",
+                        key="textmuster"
+                    )
+
+                gruppieren = st.checkbox(
+                    "Zusammengehoerige Dokumente gruppieren",
+                    value=True,
+                    help="Erkennt z.B. Schriftsaetze mit ihren Anlagen",
+                    key="gruppieren"
+                )
+
+                if st.button("Dokument analysieren und trennen", type="primary", key="start_split"):
+                    with st.spinner("Analysiere Dokument..."):
+                        import time
+                        time.sleep(2)
+
+                    st.success("Analyse abgeschlossen!")
+
+                    # Demo-Ergebnis
+                    st.markdown("**Erkannte Dokumente:**")
+                    erkannte_docs = [
+                        {"name": "Scheidungsantrag", "seiten": "1-5", "typ": "Schriftsatz"},
+                        {"name": "Anlage 1 - Heiratsurkunde", "seiten": "6", "typ": "Anlage"},
+                        {"name": "Anlage 2 - Geburtsurkunden", "seiten": "7-9", "typ": "Anlage"},
+                        {"name": "Einkommensnachweis Antragsteller", "seiten": "10-22", "typ": "Nachweis"},
+                        {"name": "Einkommensnachweis Antragsgegner", "seiten": "23-34", "typ": "Nachweis"},
+                    ]
+
+                    for doc in erkannte_docs:
+                        col_a, col_b, col_c = st.columns([3, 1, 1])
+                        with col_a:
+                            st.write(f"- {doc['name']}")
+                        with col_b:
+                            st.caption(f"S. {doc['seiten']}")
+                        with col_c:
+                            st.caption(doc["typ"])
+
+                    if st.button("Trennung bestaetigen und speichern", key="confirm_split"):
+                        st.success("5 Dokumente wurden erstellt und der Akte zugeordnet!")
+
+        with doc_col2:
+            st.markdown("#### Inhaltsverzeichnis-basierte Aufteilung")
+            st.markdown("""
+            Teilen Sie Dokumente anhand eines vorhandenen
+            Inhaltsverzeichnisses oder einer Gliederung auf.
+            """)
+
+            toc_file = st.file_uploader(
+                "Dokument mit Inhaltsverzeichnis hochladen",
+                type=["pdf"],
+                key="toc_upload"
+            )
+
+            if toc_file:
+                st.info(f"Datei: {toc_file.name}")
+
+                toc_seite = st.number_input(
+                    "Inhaltsverzeichnis auf Seite",
+                    min_value=1,
+                    value=1,
+                    key="toc_seite"
+                )
+
+                if st.button("Inhaltsverzeichnis erkennen", key="detect_toc"):
+                    with st.spinner("Analysiere Inhaltsverzeichnis..."):
+                        import time
+                        time.sleep(1)
+
+                    st.success("Inhaltsverzeichnis erkannt!")
+
+                    # Demo-Inhaltsverzeichnis
+                    st.markdown("**Erkannte Gliederung:**")
+                    gliederung = [
+                        "1. Antraege (S. 1-2)",
+                        "2. Sachverhalt (S. 3-8)",
+                        "3. Rechtliche Wuerdigung (S. 9-15)",
+                        "4. Anlagen (S. 16-30)",
+                        "   4.1 Einkommensnachweise (S. 16-22)",
+                        "   4.2 Vermoegensuebersicht (S. 23-27)",
+                        "   4.3 Sonstige Dokumente (S. 28-30)",
+                    ]
+
+                    for item in gliederung:
+                        st.write(item)
+
+                    aufteilung_level = st.selectbox(
+                        "Aufteilungsebene",
+                        ["Hauptkapitel (1., 2., ...)", "Unterkapitel (1.1, 1.2, ...)", "Alle Ebenen"],
+                        key="aufteilung_level"
+                    )
+
+                    if st.button("Nach Inhaltsverzeichnis aufteilen", type="primary", key="split_by_toc"):
+                        with st.spinner("Teile Dokument auf..."):
+                            import time
+                            time.sleep(2)
+                        st.success("Dokument wurde in 4 Teile aufgeteilt!")
+
+            st.markdown("---")
+
+            st.markdown("#### OCR-Stapelverarbeitung")
+            st.markdown("""
+            Fuehren Sie OCR fuer mehrere Dokumente gleichzeitig durch.
+            """)
+
+            ocr_files = st.file_uploader(
+                "Dokumente fuer OCR hochladen",
+                type=["pdf", "jpg", "jpeg", "png", "tiff"],
+                accept_multiple_files=True,
+                key="ocr_batch"
+            )
+
+            if ocr_files:
+                st.info(f"{len(ocr_files)} Datei(en) ausgewaehlt")
+
+                ocr_sprache = st.selectbox(
+                    "OCR-Sprache",
+                    ["Deutsch", "Englisch", "Deutsch + Englisch"],
+                    key="ocr_sprache"
+                )
+
+                ocr_optionen = st.multiselect(
+                    "OCR-Optionen",
+                    [
+                        "Automatische Dokumentklassifizierung",
+                        "Gehaltsabrechnungen extrahieren",
+                        "Aktenzeichen erkennen",
+                        "Datumsangaben extrahieren",
+                        "Geldbetraege extrahieren"
+                    ],
+                    default=["Automatische Dokumentklassifizierung", "Gehaltsabrechnungen extrahieren"],
+                    key="ocr_optionen"
+                )
+
+                if st.button("OCR-Stapelverarbeitung starten", type="primary", key="start_ocr_batch"):
+                    progress = st.progress(0)
+                    status = st.empty()
+
+                    for i, file in enumerate(ocr_files):
+                        status.text(f"Verarbeite: {file.name}")
+                        progress.progress((i + 1) / len(ocr_files))
+                        import time
+                        time.sleep(0.5)
+
+                    st.success(f"OCR fuer {len(ocr_files)} Dokumente abgeschlossen!")
 
 
 def show_mitarbeiter_dashboard():
