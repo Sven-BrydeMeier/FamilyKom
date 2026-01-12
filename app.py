@@ -415,6 +415,7 @@ def show_anwalt_menu():
             "Zugewinnausgleich",
             "RVG-Gebuehren",
             "---",
+            "Dokumentenanforderung",
             "Schriftsaetze",
             "Dokumente",
             "---",
@@ -515,6 +516,8 @@ def show_main_content():
             show_zugewinn_calculator()
         elif page == "RVG-Gebuehren":
             show_rvg_calculator()
+        elif page == "Dokumentenanforderung":
+            show_dokumentenanforderung()
         elif page == "Schriftsaetze":
             show_documents_templates()
         elif page == "Dokumente":
@@ -996,37 +999,38 @@ def show_documents_management():
     st.info("Dokumentenübersicht und -verwaltung.")
 
 
+def show_dokumentenanforderung():
+    """Dokumentenanforderung fuer Anwaelte"""
+    from src.pages.anwalt.dokumentenanforderung import render_dokumentenanforderung_page
+    render_dokumentenanforderung_page()
+
+
 # =============================================================================
-# Mandanten-Seiten (Platzhalter)
+# Mandanten-Seiten
 # =============================================================================
 
 def show_client_overview():
-    st.header("Willkommen")
-    user = st.session_state.user
-    st.markdown(f"Guten Tag, **{user.get('vorname')} {user.get('nachname')}**")
-
-    case = st.session_state.current_case
-    if case:
-        st.info(f"Ihre Akte: {case.get('case_number')} ({case.get('case_type', '').title()})")
-
-    st.markdown("---")
-    st.subheader("Offene Anforderungen")
-    st.warning("Bitte laden Sie die folgenden Dokumente hoch...")
+    """Mandanten-Dashboard mit prominenten Dokumentenanforderungen"""
+    from src.pages.mandant.dokumente import render_mandant_dashboard
+    render_mandant_dashboard()
 
 
 def show_document_upload():
-    st.header("Dokumente hochladen")
-    st.info("Laden Sie hier Ihre Dokumente hoch.")
+    """Kategorisierte Dokumenten-Upload-Seite"""
+    from src.pages.mandant.dokumente import render_dokument_upload
+    render_dokument_upload()
 
 
 def show_client_documents():
-    st.header("Meine Dokumente")
-    st.info("Übersicht Ihrer hochgeladenen Dokumente.")
+    """Uebersicht hochgeladener Dokumente"""
+    from src.pages.mandant.dokumente import render_meine_dokumente
+    render_meine_dokumente()
 
 
 def show_client_calculations():
-    st.header("Berechnungen")
-    st.info("Freigegebene Berechnungen Ihres Anwalts.")
+    """Freigegebene Berechnungen des Anwalts"""
+    from src.pages.mandant.dokumente import render_freigegebene_berechnungen
+    render_freigegebene_berechnungen()
 
 
 def show_client_messages():
