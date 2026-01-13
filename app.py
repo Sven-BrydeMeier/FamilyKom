@@ -1519,8 +1519,38 @@ def show_lawyer_dashboard():
 
             if st.button("Akte schnell anlegen", type="primary", use_container_width=True, key="schnell_anlegen"):
                 if mandant_name:
-                    st.success(f"Akte {vorgeschlagenes_az} fuer {mandant_name} wurde angelegt!")
-                    st.info("Sie werden zur Aktendetailseite weitergeleitet...")
+                    # Neue Akte erstellen
+                    from datetime import date
+                    neue_akte = {
+                        "az": vorgeschlagenes_az,
+                        "mandant": mandant_name,
+                        "gegner": gegner_name if gegner_name else "N/N",
+                        "typ": verfahrensart.split(" (")[0],  # Ohne Klammerzusatz
+                        "anwalt": f"{user.get('nachname', 'N/A')}",
+                        "status": "Aktiv",
+                        "angelegt": date.today().strftime("%d.%m.%Y"),
+                        "letzte_aktivitaet": date.today().strftime("%d.%m.%Y"),
+                        "quelle": "Schnellanlage"
+                    }
+
+                    # Zur akten_liste hinzufuegen
+                    if "akten_liste" not in st.session_state:
+                        st.session_state.akten_liste = []
+
+                    # Pruefen ob Az bereits existiert
+                    existing_az = [a["az"] for a in st.session_state.akten_liste]
+                    if vorgeschlagenes_az in existing_az:
+                        st.error(f"Aktenzeichen {vorgeschlagenes_az} existiert bereits!")
+                    else:
+                        st.session_state.akten_liste.append(neue_akte)
+
+                        # Zur Aktendetail-Seite navigieren
+                        st.session_state.selected_case = neue_akte
+                        st.session_state.current_page = "Aktendetail"
+                        st.success(f"Akte {vorgeschlagenes_az} fuer {mandant_name} wurde angelegt!")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
                 else:
                     st.warning("Bitte geben Sie mindestens den Mandantennamen ein.")
 
@@ -1789,6 +1819,8 @@ def show_lawyer_dashboard():
                             st.success(f"Import abgeschlossen! Die Akten wurden im Aktenverzeichnis angelegt.")
                             st.balloons()
                             time.sleep(1)
+                            # Zur Aktenliste navigieren
+                            st.session_state.current_page = "Akten"
                             st.rerun()
 
                     with col_btn2:
@@ -1915,6 +1947,8 @@ def show_lawyer_dashboard():
                             st.success("Import abgeschlossen!")
                             st.balloons()
                             time.sleep(1)
+                            # Zur Aktenliste navigieren
+                            st.session_state.current_page = "Akten"
                             st.rerun()
 
         with import_col2:
@@ -3399,11 +3433,24 @@ def show_case_detail():
                     st.success("Werte wurden in die Berechnung uebernommen!")
 
             if st.button("Berechnung starten", type="primary", key="start_calc"):
-                # Hier wuerde zur entsprechenden Berechnungsseite navigiert
+                # Zur entsprechenden Berechnungsseite navigieren
                 st.session_state.calc_for_case = akte["az"]
                 st.session_state.calc_type = calc_type
                 st.session_state.calc_notiz = notiz_neue
-                st.success("Berechnung wird vorbereitet...")
+
+                # Navigation zur Berechnungsseite
+                if calc_type == "Kindesunterhalt":
+                    st.session_state.current_page = "Kindesunterhalt"
+                elif calc_type == "Trennungsunterhalt" or calc_type == "Nachehelicher Unterhalt":
+                    st.session_state.current_page = "Ehegattenunterhalt"
+                elif calc_type == "Zugewinnausgleich":
+                    st.session_state.current_page = "Zugewinnausgleich"
+                elif calc_type == "RVG-Gebuehren":
+                    st.session_state.current_page = "RVG-Gebuehren"
+
+                st.success(f"{calc_type}-Berechnung wird gestartet...")
+                time.sleep(0.5)
+                st.rerun()
 
         st.markdown("---")
 
@@ -3971,11 +4018,41 @@ def show_new_case():
                 if not mandant_vorname or not mandant_nachname:
                     st.error("Bitte geben Sie mindestens den Namen des Mandanten ein.")
                 else:
-                    st.success(f"Akte {aktenzeichen} wurde erfolgreich angelegt!")
-                    if mandantenzugang:
-                        zugangscode = f"{mandant_nachname.upper()}{jahr}"
-                        st.info(f"Mandantenzugangscode: **{zugangscode}**")
-                    st.balloons()
+                    # Neue Akte erstellen und speichern
+                    neue_akte = {
+                        "az": aktenzeichen,
+                        "mandant": f"{mandant_vorname} {mandant_nachname}",
+                        "gegner": f"{gegner_vorname} {gegner_nachname}" if gegner_vorname and gegner_nachname else "N/N",
+                        "typ": verfahrensart.split(" (")[0],
+                        "anwalt": zustaendiger_anwalt.split()[-1],  # Nachname des Anwalts
+                        "status": "Aktiv",
+                        "angelegt": date.today().strftime("%d.%m.%Y"),
+                        "letzte_aktivitaet": date.today().strftime("%d.%m.%Y"),
+                        "quelle": "Neuanlage"
+                    }
+
+                    # Zur akten_liste hinzufuegen
+                    if "akten_liste" not in st.session_state:
+                        st.session_state.akten_liste = []
+
+                    # Pruefen ob Az bereits existiert
+                    existing_az = [a["az"] for a in st.session_state.akten_liste]
+                    if aktenzeichen in existing_az:
+                        st.error(f"Aktenzeichen {aktenzeichen} existiert bereits!")
+                    else:
+                        st.session_state.akten_liste.append(neue_akte)
+
+                        if mandantenzugang:
+                            zugangscode = f"{mandant_nachname.upper()}{jahr}"
+                            st.info(f"Mandantenzugangscode: **{zugangscode}**")
+
+                        # Zur Aktendetail-Seite navigieren
+                        st.session_state.selected_case = neue_akte
+                        st.session_state.current_page = "Aktendetail"
+                        st.success(f"Akte {aktenzeichen} wurde erfolgreich angelegt!")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
 
         with col3:
             if st.button("Abbrechen", use_container_width=True):
