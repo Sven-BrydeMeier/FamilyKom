@@ -1654,6 +1654,8 @@ def show_lawyer_dashboard():
                                     "typ": akte.typ,
                                     "angelegt": akte.angelegt,
                                     "dokumente": akte.dokument_count,
+                                    "dokumente_namen": akte.dokumente,  # Die echten Dokumentnamen aus den Lesezeichen!
+                                    "quelle": akte.quelle,
                                     "status": "erkannt"
                                 })
 
@@ -1731,7 +1733,7 @@ def show_lawyer_dashboard():
                             with col1:
                                 st.markdown(f"**Az. {akte['az']}**")
                                 st.caption(f"{akte['mandant']} ./. {akte['gegner']}")
-                                st.caption(f"Typ: {akte['typ']} | {akte['dokumente']} Dokumente")
+                                st.caption(f"Typ: {akte['typ']} | {akte['dokumente']} Dokumente | {akte.get('quelle', 'Import')}")
 
                             with col2:
                                 # Aktion auswaehlen
@@ -1766,6 +1768,12 @@ def show_lawyer_dashboard():
                                 else:
                                     st.info("Bereit")
 
+                        # Echte Dokumentnamen aus den PDF-Lesezeichen anzeigen
+                        dokumente_namen = akte.get("dokumente_namen", [])
+                        if dokumente_namen:
+                            with st.expander(f"Dokumente aus PDF anzeigen ({len(dokumente_namen)} Stueck)"):
+                                for doc_name in dokumente_namen:
+                                    st.write(f"- {doc_name}")
                         st.markdown("---")
 
                     # Dokumente ohne Akte
@@ -1807,7 +1815,10 @@ def show_lawyer_dashboard():
                                         "typ": akte["typ"],
                                         "status": "Aktiv",
                                         "angelegt": akte["angelegt"],
-                                        "quelle": "RA-MICRO Import"
+                                        "quelle": akte.get("quelle", "RA-MICRO Import"),
+                                        # Die echten Dokumentnamen aus dem PDF-Import!
+                                        "dokumente_namen": akte.get("dokumente_namen", []),
+                                        "dokument_count": akte.get("dokumente", 0)
                                     }
                                     # Pruefen ob Akte bereits existiert
                                     existing_az = [a["az"] for a in st.session_state.akten_liste]
@@ -3093,101 +3104,154 @@ def show_case_detail():
     with tab2:
         st.subheader("Dokumentenverwaltung")
 
-        # Demo-Dokumente fuer diese Akte
-        dokumente = [
-            {
-                "id": 1,
-                "name": "Personalausweis_Mustermann.pdf",
-                "kategorie": "Persoenliche Dokumente",
-                "typ": "Personalausweis",
-                "hochgeladen": "05.01.2026 10:30",
-                "hochgeladen_von": "Mandant",
-                "groesse": "2.1 MB",
-                "status": "geprueft",
-                "geprueft_am": "06.01.2026 14:00",
-                "geprueft_von": "Dr. Mueller",
-                "notiz": "In Ordnung"
-            },
-            {
-                "id": 2,
-                "name": "Heiratsurkunde.pdf",
-                "kategorie": "Persoenliche Dokumente",
-                "typ": "Heiratsurkunde",
-                "hochgeladen": "05.01.2026 10:32",
-                "hochgeladen_von": "Mandant",
-                "groesse": "1.8 MB",
-                "status": "geprueft",
-                "geprueft_am": "06.01.2026 14:05",
-                "geprueft_von": "Dr. Mueller",
-                "notiz": "Vollstaendig"
-            },
-            {
-                "id": 3,
-                "name": "Gehaltsabrechnung_Dez_2025.pdf",
-                "kategorie": "Einkommensnachweise",
-                "typ": "Gehaltsabrechnung",
-                "hochgeladen": "08.01.2026 09:15",
-                "hochgeladen_von": "Mandant",
-                "groesse": "0.9 MB",
-                "status": "ocr_fertig",
-                "ocr_ergebnis": {
-                    "brutto": 4850.00,
-                    "netto": 3125.50,
-                    "steuerklasse": "III",
-                    "arbeitgeber": "Stadtwerke Rendsburg GmbH",
-                    "monat": "Dezember 2025"
+        # Pruefen ob importierte Dokumente vorhanden sind
+        importierte_dokumente = akte.get("dokumente_namen", [])
+
+        if importierte_dokumente:
+            # Echte Dokumente aus dem PDF-Import anzeigen!
+            st.success(f"**{len(importierte_dokumente)} Dokument(e) aus RA-MICRO Import**")
+
+            dokumente = []
+            for idx, doc_name in enumerate(importierte_dokumente, 1):
+                # Kategorie automatisch erkennen
+                doc_lower = doc_name.lower()
+                if "gehalt" in doc_lower or "lohn" in doc_lower or "verdienst" in doc_lower:
+                    kategorie = "Einkommensnachweise"
+                    typ = "Gehaltsabrechnung"
+                elif "steuer" in doc_lower:
+                    kategorie = "Einkommensnachweise"
+                    typ = "Steuerbescheid"
+                elif "miet" in doc_lower or "wohnung" in doc_lower:
+                    kategorie = "Wohnung"
+                    typ = "Mietvertrag"
+                elif "konto" in doc_lower or "bank" in doc_lower:
+                    kategorie = "Vermoegen"
+                    typ = "Kontoauszug"
+                elif "heirat" in doc_lower or "ehe" in doc_lower:
+                    kategorie = "Persoenliche Dokumente"
+                    typ = "Heiratsurkunde"
+                elif "ausweis" in doc_lower or "personal" in doc_lower:
+                    kategorie = "Persoenliche Dokumente"
+                    typ = "Personalausweis"
+                elif "schrift" in doc_lower or "antrag" in doc_lower or "klage" in doc_lower:
+                    kategorie = "Schriftsaetze"
+                    typ = "Schriftsatz"
+                elif "beschluss" in doc_lower or "urteil" in doc_lower or "gericht" in doc_lower:
+                    kategorie = "Gerichtliche Dokumente"
+                    typ = "Gerichtsbeschluss"
+                else:
+                    kategorie = "Sonstige"
+                    typ = "Dokument"
+
+                dokumente.append({
+                    "id": idx,
+                    "name": doc_name,
+                    "kategorie": kategorie,
+                    "typ": typ,
+                    "hochgeladen": akte.get("angelegt", "Import"),
+                    "hochgeladen_von": "RA-MICRO Import",
+                    "groesse": "-",
+                    "status": "neu",
+                    "geprueft_am": None,
+                    "geprueft_von": None,
+                    "notiz": None
+                })
+        else:
+            # Demo-Dokumente fuer diese Akte (wenn kein Import)
+            dokumente = [
+                {
+                    "id": 1,
+                    "name": "Personalausweis_Mustermann.pdf",
+                    "kategorie": "Persoenliche Dokumente",
+                    "typ": "Personalausweis",
+                    "hochgeladen": "05.01.2026 10:30",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "2.1 MB",
+                    "status": "geprueft",
+                    "geprueft_am": "06.01.2026 14:00",
+                    "geprueft_von": "Dr. Mueller",
+                    "notiz": "In Ordnung"
                 },
-                "geprueft_am": None,
-                "geprueft_von": None,
-                "notiz": None
-            },
-            {
-                "id": 4,
-                "name": "Gehaltsabrechnung_Nov_2025.pdf",
-                "kategorie": "Einkommensnachweise",
-                "typ": "Gehaltsabrechnung",
-                "hochgeladen": "08.01.2026 09:16",
-                "hochgeladen_von": "Mandant",
-                "groesse": "0.9 MB",
-                "status": "ocr_fertig",
-                "ocr_ergebnis": {
-                    "brutto": 4850.00,
-                    "netto": 3125.50,
-                    "steuerklasse": "III",
-                    "arbeitgeber": "Stadtwerke Rendsburg GmbH",
-                    "monat": "November 2025"
+                {
+                    "id": 2,
+                    "name": "Heiratsurkunde.pdf",
+                    "kategorie": "Persoenliche Dokumente",
+                    "typ": "Heiratsurkunde",
+                    "hochgeladen": "05.01.2026 10:32",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "1.8 MB",
+                    "status": "geprueft",
+                    "geprueft_am": "06.01.2026 14:05",
+                    "geprueft_von": "Dr. Mueller",
+                    "notiz": "Vollstaendig"
                 },
-                "geprueft_am": None,
-                "geprueft_von": None,
-                "notiz": None
-            },
-            {
-                "id": 5,
-                "name": "Mietvertrag_Ehewohnung.pdf",
-                "kategorie": "Wohnung",
-                "typ": "Mietvertrag",
-                "hochgeladen": "10.01.2026 14:20",
-                "hochgeladen_von": "Mandant",
-                "groesse": "3.2 MB",
-                "status": "neu",
-                "geprueft_am": None,
-                "geprueft_von": None,
-                "notiz": None
-            },
-            {
-                "id": 6,
-                "name": "Kontoauszug_Gemeinschaftskonto.pdf",
-                "kategorie": "Vermoegen",
-                "typ": "Kontoauszug",
-                "hochgeladen": "11.01.2026 11:00",
-                "hochgeladen_von": "Mandant",
-                "groesse": "1.5 MB",
-                "status": "neu",
-                "geprueft_am": None,
-                "geprueft_von": None,
-                "notiz": None
-            },
-        ]
+                {
+                    "id": 3,
+                    "name": "Gehaltsabrechnung_Dez_2025.pdf",
+                    "kategorie": "Einkommensnachweise",
+                    "typ": "Gehaltsabrechnung",
+                    "hochgeladen": "08.01.2026 09:15",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "0.9 MB",
+                    "status": "ocr_fertig",
+                    "ocr_ergebnis": {
+                        "brutto": 4850.00,
+                        "netto": 3125.50,
+                        "steuerklasse": "III",
+                        "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                        "monat": "Dezember 2025"
+                    },
+                    "geprueft_am": None,
+                    "geprueft_von": None,
+                    "notiz": None
+                },
+                {
+                    "id": 4,
+                    "name": "Gehaltsabrechnung_Nov_2025.pdf",
+                    "kategorie": "Einkommensnachweise",
+                    "typ": "Gehaltsabrechnung",
+                    "hochgeladen": "08.01.2026 09:16",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "0.9 MB",
+                    "status": "ocr_fertig",
+                    "ocr_ergebnis": {
+                        "brutto": 4850.00,
+                        "netto": 3125.50,
+                        "steuerklasse": "III",
+                        "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                        "monat": "November 2025"
+                    },
+                    "geprueft_am": None,
+                    "geprueft_von": None,
+                    "notiz": None
+                },
+                {
+                    "id": 5,
+                    "name": "Mietvertrag_Ehewohnung.pdf",
+                    "kategorie": "Wohnung",
+                    "typ": "Mietvertrag",
+                    "hochgeladen": "10.01.2026 14:20",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "3.2 MB",
+                    "status": "neu",
+                    "geprueft_am": None,
+                    "geprueft_von": None,
+                    "notiz": None
+                },
+                {
+                    "id": 6,
+                    "name": "Kontoauszug_Gemeinschaftskonto.pdf",
+                    "kategorie": "Vermoegen",
+                    "typ": "Kontoauszug",
+                    "hochgeladen": "11.01.2026 11:00",
+                    "hochgeladen_von": "Mandant",
+                    "groesse": "1.5 MB",
+                    "status": "neu",
+                    "geprueft_am": None,
+                    "geprueft_von": None,
+                    "notiz": None
+                },
+            ]
 
         # Filter und Statistik
         col1, col2, col3, col4 = st.columns(4)

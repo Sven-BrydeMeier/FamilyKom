@@ -600,10 +600,44 @@ def parse_ra_micro_pdf(pdf_file: BinaryIO) -> Dict:
     }
 
 
+def generiere_aktenzeichen_aus_dateiname(dateiname: str) -> str:
+    """
+    Generiert ein Aktenzeichen aus dem Dateinamen.
+
+    Args:
+        dateiname: Der Dateiname
+
+    Returns:
+        Generiertes Aktenzeichen
+    """
+    # Versuche Aktenzeichen aus Dateiname zu extrahieren
+    for muster in AKTENZEICHEN_MUSTER:
+        match = re.search(muster, dateiname)
+        if match:
+            return match.group(1)
+
+    # Fallback: Aus Dateinamen generieren
+    # Entferne Erweiterung und Sonderzeichen
+    name = os.path.splitext(dateiname)[0]
+    name = re.sub(r'[^\w\s-]', '', name)
+    name = re.sub(r'\s+', '_', name).strip()
+
+    if name:
+        # Jahr + bereinigte Dateiname
+        jahr = datetime.now().year
+        return f"{jahr}/{name[:20]}"
+    else:
+        # Timestamp-basiert
+        return datetime.now().strftime("%Y/%m%d%H%M")
+
+
 def importiere_pdf(pdf_file: BinaryIO, dateiname: str = "") -> ImportErgebnis:
     """
     Hauptfunktion zum Importieren einer PDF-Datei.
     Verwendet die NotarKom parse_ra_micro_pdf Methode.
+
+    WICHTIG: Erstellt IMMER eine Akte mit den echten PDF-Daten,
+    auch wenn kein Aktenzeichen automatisch erkannt wird.
 
     Args:
         pdf_file: PDF-Datei als Binary-Stream
@@ -630,40 +664,48 @@ def importiere_pdf(pdf_file: BinaryIO, dateiname: str = "") -> ImportErgebnis:
         if parse_result['documents']:
             doc_count = len(parse_result['documents'])
             if doc_count > 1 or parse_result['documents'][0]['name'] != 'Gesamtakte':
-                ergebnis.hinweise.append(f"{doc_count} Lesezeichen/Dokumente gefunden")
+                ergebnis.hinweise.append(f"{doc_count} Lesezeichen/Dokumente aus PDF extrahiert")
             else:
                 ergebnis.hinweise.append("Keine Lesezeichen im PDF gefunden - Gesamtdokument wird verwendet")
 
-        # Akte erstellen wenn Aktenzeichen gefunden
-        if parse_result.get('aktenzeichen'):
-            akte = ErkannteAkte(
-                aktenzeichen=parse_result['aktenzeichen'],
-                mandant=parse_result.get('mandant') or "Unbekannt",
-                gegner=parse_result.get('gegner') or "Unbekannt",
-                typ=parse_result.get('verfahrensart') or "Familienrecht",
-                angelegt=datetime.now().strftime("%d.%m.%Y"),
-                quelle="RA-MICRO Import"
-            )
+        # Aktenzeichen bestimmen (automatisch oder aus Dateiname)
+        aktenzeichen = parse_result.get('aktenzeichen')
+        az_quelle = "automatisch erkannt"
 
-            # Dokumente aus Lesezeichen
-            akte.dokumente = [d['name'] for d in parse_result['documents']]
-            akte.dokument_count = len(parse_result['documents'])
+        if not aktenzeichen:
+            # Versuche Aktenzeichen aus Dateiname zu generieren
+            aktenzeichen = generiere_aktenzeichen_aus_dateiname(dateiname)
+            az_quelle = "aus Dateiname generiert"
+            ergebnis.hinweise.append(f"Aktenzeichen {az_quelle}: {aktenzeichen}")
 
-            # PDF-Teilung fuer Download vorbereiten
-            if lesezeichen:
-                pdf_file.seek(0)
-                dokumente = teile_pdf_nach_lesezeichen(pdf_file, lesezeichen)
-                ergebnis.dokumente = dokumente
+        # IMMER eine Akte erstellen mit den echten PDF-Daten
+        akte = ErkannteAkte(
+            aktenzeichen=aktenzeichen,
+            mandant=parse_result.get('mandant') or "Aus PDF importiert",
+            gegner=parse_result.get('gegner') or "Siehe Dokumente",
+            typ=parse_result.get('verfahrensart') or "Familienrecht",
+            angelegt=datetime.now().strftime("%d.%m.%Y"),
+            quelle=f"RA-MICRO Import ({az_quelle})"
+        )
 
-            ergebnis.akten.append(akte)
-        else:
-            # Kein Aktenzeichen gefunden - als Dokument ohne Akte markieren
-            ergebnis.dokumente_ohne_akte.append({
-                "name": dateiname,
-                "seiten": parse_result.get('num_pages', 0),
-                "text_vorschau": ""
-            })
-            ergebnis.hinweise.append("Kein Aktenzeichen erkannt - manuelle Zuordnung erforderlich")
+        # Dokumente aus Lesezeichen - das sind die ECHTEN Dokumentnamen aus dem PDF!
+        akte.dokumente = [d['name'] for d in parse_result['documents']]
+        akte.dokument_count = len(parse_result['documents'])
+
+        # PDF-Teilung fuer Download vorbereiten
+        if lesezeichen:
+            pdf_file.seek(0)
+            dokumente = teile_pdf_nach_lesezeichen(pdf_file, lesezeichen)
+            ergebnis.dokumente = dokumente
+
+        ergebnis.akten.append(akte)
+
+        # Debug-Info
+        print(f"Akte erstellt: {aktenzeichen}")
+        print(f"  Mandant: {akte.mandant}")
+        print(f"  Dokumente: {akte.dokument_count}")
+        for doc in akte.dokumente[:5]:
+            print(f"    - {doc}")
 
     except Exception as e:
         ergebnis.erfolgreich = False
