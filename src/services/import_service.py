@@ -49,6 +49,7 @@ class ExtrahiertesDokument:
     seitenanzahl: int
     pdf_bytes: Optional[bytes] = None
     text_vorschau: str = ""
+    original_titel: str = ""  # Original-Lesezeichen-Titel fuer Zuordnung
 
 
 @dataclass
@@ -691,7 +692,8 @@ def teile_pdf_nach_lesezeichen(
                 end_seite=end_page,
                 seitenanzahl=end_page - start_page + 1,
                 pdf_bytes=doc_pdf_bytes,
-                text_vorschau=lz.titel
+                text_vorschau=lz.titel,
+                original_titel=lz.titel  # Original-Name fuer Zuordnung speichern
             )
             dokumente.append(dokument)
 

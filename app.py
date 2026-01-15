@@ -1729,7 +1729,8 @@ def show_lawyer_dashboard():
                                     "end_seite": dok.end_seite,
                                     "seitenanzahl": dok.seitenanzahl,
                                     "pdf_bytes": dok.pdf_bytes,  # Die echten PDF-Daten!
-                                    "text_vorschau": dok.text_vorschau
+                                    "text_vorschau": dok.text_vorschau,
+                                    "original_titel": dok.original_titel  # Original-Name fuer Zuordnung
                                 })
 
                             st.session_state.import_result = {
@@ -1904,8 +1905,11 @@ def show_lawyer_dashboard():
                                 if "pdf_dokumente" not in st.session_state:
                                     st.session_state.pdf_dokumente = {}
                                 for dok in result["extrahierte_dokumente"]:
-                                    # Speichern unter Dokumentname als Schluessel
+                                    # Speichern unter mehreren Schluesseln fuer einfacheres Matching
                                     st.session_state.pdf_dokumente[dok["name"]] = dok
+                                    # Auch unter Original-Titel speichern (fuer Zuordnung)
+                                    if dok.get("original_titel"):
+                                        st.session_state.pdf_dokumente[dok["original_titel"]] = dok
 
                             st.session_state.show_import_result = False
                             st.session_state.import_result = None
@@ -3503,16 +3507,44 @@ def show_case_detail():
                         # Versuche PDF-Bytes aus Session State zu laden
                         pdf_dokumente = st.session_state.get("pdf_dokumente", {})
 
-                        # Verschiedene Schluessel-Varianten pruefen
-                        if doc_name in pdf_dokumente:
-                            pdf_bytes = pdf_dokumente[doc_name].get("pdf_bytes")
-                        elif doc_name.replace(".pdf", "") in pdf_dokumente:
-                            pdf_bytes = pdf_dokumente[doc_name.replace(".pdf", "")].get("pdf_bytes")
-                        else:
-                            # Suche nach aehnlichem Namen (z.B. mit _)
-                            safe_name = doc_name.replace(" ", "_").replace(".pdf", "") + ".pdf"
-                            if safe_name in pdf_dokumente:
-                                pdf_bytes = pdf_dokumente[safe_name].get("pdf_bytes")
+                        # Funktion um PDF zu finden
+                        def finde_pdf_bytes(name, pdf_docs):
+                            """Sucht PDF-Bytes unter verschiedenen Schluessel-Varianten"""
+                            import re as re_local
+                            if not pdf_docs:
+                                return None
+
+                            # Direkte Suche
+                            if name in pdf_docs:
+                                return pdf_docs[name].get("pdf_bytes")
+
+                            # Ohne .pdf
+                            name_ohne_pdf = name.replace(".pdf", "")
+                            if name_ohne_pdf in pdf_docs:
+                                return pdf_docs[name_ohne_pdf].get("pdf_bytes")
+
+                            # Mit .pdf
+                            if not name.endswith(".pdf"):
+                                name_mit_pdf = name + ".pdf"
+                                if name_mit_pdf in pdf_docs:
+                                    return pdf_docs[name_mit_pdf].get("pdf_bytes")
+
+                            # Bereinigter Name (wie in import_service)
+                            safe_name = re_local.sub(r'[^\w\s-]', '', name_ohne_pdf)
+                            safe_name = re_local.sub(r'\s+', '_', safe_name)
+                            if safe_name + ".pdf" in pdf_docs:
+                                return pdf_docs[safe_name + ".pdf"].get("pdf_bytes")
+
+                            # Durchsuche alle Eintraege nach original_titel
+                            for key, dok in pdf_docs.items():
+                                if dok.get("original_titel") == name or dok.get("original_titel") == name_ohne_pdf:
+                                    return dok.get("pdf_bytes")
+                                if dok.get("text_vorschau") == name or dok.get("text_vorschau") == name_ohne_pdf:
+                                    return dok.get("pdf_bytes")
+
+                            return None
+
+                        pdf_bytes = finde_pdf_bytes(doc_name, pdf_dokumente)
 
                         if pdf_bytes:
                             # Echte PDF-Vorschau anzeigen
