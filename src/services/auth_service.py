@@ -14,8 +14,21 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass, field
-import bcrypt
-import jwt
+from enum import Enum
+
+# Optionale Importe - bcrypt fuer sichere Passwort-Hashes
+try:
+    import bcrypt
+    BCRYPT_AVAILABLE = True
+except ImportError:
+    BCRYPT_AVAILABLE = False
+
+# JWT fuer Token-basierte Sessions
+try:
+    import jwt
+    JWT_AVAILABLE = True
+except ImportError:
+    JWT_AVAILABLE = False
 
 # Supabase (optional)
 try:
@@ -23,6 +36,14 @@ try:
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
+
+
+class BenutzerRolle(Enum):
+    """Verfuegbare Benutzerrollen"""
+    ADMIN = "admin"
+    ANWALT = "anwalt"
+    MITARBEITER = "mitarbeiter"
+    MANDANT = "mandant"
 
 
 @dataclass
@@ -223,13 +244,31 @@ class AuthService:
         }
 
     def _hash_passwort(self, passwort: str) -> str:
-        """Hasht ein Passwort mit bcrypt"""
-        return bcrypt.hashpw(passwort.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        """Hasht ein Passwort mit bcrypt oder SHA256 als Fallback"""
+        if BCRYPT_AVAILABLE:
+            return bcrypt.hashpw(passwort.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        else:
+            # Fallback: SHA256 mit Salt (weniger sicher, aber funktioniert ohne bcrypt)
+            salt = secrets.token_hex(16)
+            hash_value = hashlib.sha256((salt + passwort).encode('utf-8')).hexdigest()
+            return f"sha256:{salt}:{hash_value}"
 
     def _verify_passwort(self, passwort: str, passwort_hash: str) -> bool:
         """Verifiziert ein Passwort gegen einen Hash"""
         try:
-            return bcrypt.checkpw(passwort.encode('utf-8'), passwort_hash.encode('utf-8'))
+            if passwort_hash.startswith("sha256:"):
+                # SHA256 Fallback-Hash verifizieren
+                parts = passwort_hash.split(":")
+                if len(parts) == 3:
+                    salt = parts[1]
+                    stored_hash = parts[2]
+                    computed_hash = hashlib.sha256((salt + passwort).encode('utf-8')).hexdigest()
+                    return computed_hash == stored_hash
+                return False
+            elif BCRYPT_AVAILABLE:
+                return bcrypt.checkpw(passwort.encode('utf-8'), passwort_hash.encode('utf-8'))
+            else:
+                return False
         except Exception:
             return False
 
@@ -264,22 +303,57 @@ class AuthService:
         self._login_versuche[benutzername].append(time.time())
 
     def _erstelle_token(self, benutzer: Benutzer) -> str:
-        """Erstellt einen JWT-Token fuer einen Benutzer"""
-        payload = {
-            "user_id": benutzer.id,
-            "benutzername": benutzer.benutzername,
-            "rolle": benutzer.rolle,
-            "exp": datetime.utcnow() + self.session_dauer
-        }
-        return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+        """Erstellt einen JWT-Token oder Fallback-Token fuer einen Benutzer"""
+        if JWT_AVAILABLE:
+            payload = {
+                "user_id": benutzer.id,
+                "benutzername": benutzer.benutzername,
+                "rolle": benutzer.rolle,
+                "exp": datetime.utcnow() + self.session_dauer
+            }
+            return jwt.encode(payload, self.jwt_secret, algorithm="HS256")
+        else:
+            # Fallback: Einfacher Token (nur fuer Demo-Modus geeignet)
+            import base64
+            import json
+            exp_timestamp = int((datetime.utcnow() + self.session_dauer).timestamp())
+            payload = {
+                "user_id": benutzer.id,
+                "benutzername": benutzer.benutzername,
+                "rolle": benutzer.rolle,
+                "exp": exp_timestamp
+            }
+            payload_json = json.dumps(payload)
+            token_data = base64.b64encode(payload_json.encode()).decode()
+            signature = hashlib.sha256((token_data + self.jwt_secret).encode()).hexdigest()[:16]
+            return f"demo:{token_data}:{signature}"
 
     def _verifiziere_token(self, token: str) -> Optional[Dict]:
-        """Verifiziert einen JWT-Token"""
+        """Verifiziert einen JWT-Token oder Fallback-Token"""
         try:
-            return jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
-        except jwt.ExpiredSignatureError:
-            return None
-        except jwt.InvalidTokenError:
+            if token.startswith("demo:"):
+                # Fallback-Token verifizieren
+                import base64
+                import json
+                parts = token.split(":")
+                if len(parts) == 3:
+                    token_data = parts[1]
+                    signature = parts[2]
+                    expected_sig = hashlib.sha256((token_data + self.jwt_secret).encode()).hexdigest()[:16]
+                    if signature != expected_sig:
+                        return None
+                    payload_json = base64.b64decode(token_data).decode()
+                    payload = json.loads(payload_json)
+                    # Ablauf pruefen
+                    if payload.get("exp", 0) < int(datetime.utcnow().timestamp()):
+                        return None
+                    return payload
+                return None
+            elif JWT_AVAILABLE:
+                return jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
+            else:
+                return None
+        except Exception:
             return None
 
     def login(self, benutzername: str, passwort: str) -> AuthErgebnis:
@@ -590,3 +664,32 @@ def get_auth_service() -> AuthService:
     if _auth_service is None:
         _auth_service = AuthService()
     return _auth_service
+
+
+def erstelle_auth_service(
+    supabase_url: str = None,
+    supabase_key: str = None,
+    demo_modus: bool = True
+) -> AuthService:
+    """
+    Erstellt einen neuen AuthService
+
+    Args:
+        supabase_url: Supabase URL (optional)
+        supabase_key: Supabase API Key (optional)
+        demo_modus: Wenn True, wird Demo-Modus verwendet
+
+    Returns:
+        Konfigurierter AuthService
+    """
+    import os
+
+    if not supabase_url:
+        supabase_url = os.getenv('SUPABASE_URL')
+    if not supabase_key:
+        supabase_key = os.getenv('SUPABASE_KEY')
+
+    service = AuthService(supabase_url=supabase_url, supabase_key=supabase_key)
+    service.demo_modus = demo_modus or not (supabase_url and supabase_key)
+
+    return service
