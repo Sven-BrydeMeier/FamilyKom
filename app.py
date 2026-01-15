@@ -3556,12 +3556,18 @@ def show_case_detail():
                         else:
                             # Fallback-Meldung
                             st.warning("PDF-Vorschau nicht verfuegbar")
+
+                            # Debug-Info anzeigen
+                            with st.expander("Debug-Informationen", expanded=False):
+                                st.write(f"**Gesuchter Dokumentname:** `{doc_name}`")
+                                st.write(f"**Anzahl gespeicherter PDFs:** {len(pdf_dokumente)}")
+                                if pdf_dokumente:
+                                    st.write("**Verfuegbare Schluessel:**")
+                                    for key in list(pdf_dokumente.keys())[:10]:
+                                        st.code(key)
+
                             st.info("""
                             Die PDF-Vorschau ist fuer dieses Dokument nicht verfuegbar.
-
-                            **Moegliche Gruende:**
-                            - Das Dokument wurde vor dem PDF-Viewer-Update importiert
-                            - Die PDF-Daten wurden aus Speichergruenden nicht gespeichert
 
                             **Loesung:**
                             Importieren Sie die RA-MICRO Akte erneut, um die PDF-Vorschau zu aktivieren.
