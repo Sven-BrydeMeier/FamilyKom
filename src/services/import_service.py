@@ -135,54 +135,232 @@ def parse_aktenvorblatt(text: str) -> Dict:
         'sachbearbeiter': None
     }
 
-    # Aktenzeichen / Aktennr.
-    az_match = re.search(r'Aktennr\.?:?\s*(\d+[/-]\d+)', text)
-    if az_match:
-        result['aktenzeichen'] = az_match.group(1)
+    # Debug: Text ausgeben
+    print(f"=== Aktenvorblatt-Text (erste 500 Zeichen) ===")
+    print(text[:500])
+    print("=" * 50)
 
-    # Gegenstandswert
-    gw_match = re.search(r'GEGENSTANDSWERT:?\s*([\d.,]+)\s*(?:EUR|€)?', text, re.IGNORECASE)
-    if gw_match:
-        result['gegenstandswert'] = gw_match.group(1).strip()
+    # Aktenzeichen / Aktennr. - verschiedene Formate versuchen
+    # Format: "Aktennr.: 1263/25" oder "Aktennr: 1263/25"
+    az_patterns = [
+        r'Aktennr\.?\s*:?\s*(\d+[/-]\d+)',  # Aktennr.: 1263/25
+        r'Aktenzeichen\s*:?\s*(\d+[/-]\d+)',  # Aktenzeichen: 1263/25
+        r'Az\.?\s*:?\s*(\d+[/-]\d+)',  # Az.: 1263/25
+    ]
+    for pattern in az_patterns:
+        az_match = re.search(pattern, text)
+        if az_match:
+            result['aktenzeichen'] = az_match.group(1)
+            print(f"Aktenzeichen gefunden: {result['aktenzeichen']}")
+            break
 
-    # Gericht (I. Instanz)
-    gericht_match = re.search(r'I\.\s*Instanz:?\s*([A-Za-zäöüÄÖÜß\s]+?)(?:Aktenzeichen|II\.|$)', text)
-    if gericht_match:
-        result['gericht'] = gericht_match.group(1).strip()
+    # Gegenstandswert - Format: "14.861,34 €" oder "GEGENSTANDSWERT: 14.861,34"
+    gw_patterns = [
+        r'GEGENSTANDSWERT:?\s*([\d.,]+)\s*(?:EUR|€)?',
+        r'([\d.,]+)\s*€',  # Nur Betrag mit Euro-Zeichen
+    ]
+    for pattern in gw_patterns:
+        gw_match = re.search(pattern, text, re.IGNORECASE)
+        if gw_match:
+            result['gegenstandswert'] = gw_match.group(1).strip()
+            print(f"Gegenstandswert gefunden: {result['gegenstandswert']}")
+            break
 
-    # Gerichtsaktenzeichen
-    gaz_match = re.search(r'Aktenzeichen:?\s*(\d+\s*[A-Z]+\s*\d+[/-]\d+)', text)
-    if gaz_match:
-        result['gerichts_az'] = gaz_match.group(1).strip()
+    # Gericht (I. Instanz) - Format: "I. Instanz: Landgericht Potsdam"
+    gericht_patterns = [
+        r'I\.\s*Instanz:?\s*([A-Za-zäöüÄÖÜß\s]+?)(?:\n|Aktenzeichen|II\.|$)',
+        r'Landgericht\s+([A-Za-zäöüÄÖÜß]+)',
+        r'Amtsgericht\s+([A-Za-zäöüÄÖÜß]+)',
+    ]
+    for pattern in gericht_patterns:
+        gericht_match = re.search(pattern, text)
+        if gericht_match:
+            gericht_text = gericht_match.group(1).strip() if gericht_match.lastindex >= 1 else gericht_match.group(0).strip()
+            # Nur "Landgericht/Amtsgericht Stadt" behalten
+            if not gericht_text.startswith(('Landgericht', 'Amtsgericht')):
+                gericht_text = f"Landgericht {gericht_text}" if 'Landgericht' in text else f"Amtsgericht {gericht_text}"
+            result['gericht'] = gericht_text
+            print(f"Gericht gefunden: {result['gericht']}")
+            break
 
     # Referat/SB
-    ref_match = re.search(r'SB\s*/\s*Referat:?\s*([A-Za-z0-9/]+)', text)
+    ref_match = re.search(r'SB\s*/?\s*Referat:?\s*([A-Za-z0-9/]+)', text)
     if ref_match:
         result['referat'] = ref_match.group(1).strip()
 
-    # AUFTRAGGEBER (Mandant) - komplexeres Parsing
-    auftraggeber_section = extract_section(text, 'AUFTRAGGEBER', ['GEGNERVERTRETER', 'GEGNER', 'RECHTSSCHUTZ'])
-    if auftraggeber_section:
-        mandant_data = parse_party_section(auftraggeber_section)
-        result['mandant'] = mandant_data.get('name', '')
-        result['mandant_adresse'] = mandant_data
+    # === PARTEIEN PARSEN ===
+    # Im RA-Micro Aktenvorblatt sind die Parteien durch Adressnr gekennzeichnet
 
-    # GEGNER
-    gegner_section = extract_section(text, 'GEGNER:', ['AUFTRAGGEBER', 'GEGNERVERTRETER', 'RECHTSSCHUTZ'])
-    if not gegner_section:
-        # Alternative ohne Doppelpunkt
-        gegner_section = extract_section(text, '\nGEGNER', ['AUFTRAGGEBER', 'GEGNERVERTRETER', 'RECHTSSCHUTZ'])
-    if gegner_section:
-        gegner_data = parse_party_section(gegner_section)
-        result['gegner'] = gegner_data.get('name', '')
+    # Suche nach Firmen/Personen mit Adressnummern
+    # Format: "Adressnr: 36361" gefolgt oder vorangestellt von Name
+
+    # Auftraggeber finden - suche nach AUFTRAGGEBER Section
+    auftraggeber_data = parse_ra_micro_party(text, 'AUFTRAGGEBER')
+    if auftraggeber_data and auftraggeber_data.get('name'):
+        result['mandant'] = auftraggeber_data['name']
+        result['mandant_adresse'] = auftraggeber_data
+        print(f"Auftraggeber/Mandant gefunden: {result['mandant']}")
+
+    # Gegner finden
+    gegner_data = parse_ra_micro_party(text, 'GEGNER')
+    if gegner_data and gegner_data.get('name'):
+        result['gegner'] = gegner_data['name']
         result['gegner_adresse'] = gegner_data
+        print(f"Gegner gefunden: {result['gegner']}")
 
-    # GEGNERVERTRETER
-    gv_section = extract_section(text, 'GEGNERVERTRETER', ['AUFTRAGGEBER', 'GEGNER:', 'RECHTSSCHUTZ'])
-    if gv_section:
-        gv_data = parse_party_section(gv_section)
-        result['gegnervertreter'] = gv_data.get('name', '')
+    # Gegnervertreter finden
+    gv_data = parse_ra_micro_party(text, 'GEGNERVERTRETER')
+    if gv_data and gv_data.get('name'):
+        result['gegnervertreter'] = gv_data['name']
         result['gegnervertreter_adresse'] = gv_data
+        print(f"Gegnervertreter gefunden: {result['gegnervertreter']}")
+
+    return result
+
+
+def parse_ra_micro_party(text: str, party_type: str) -> Dict:
+    """
+    Parst eine Partei aus dem RA-Micro Aktenvorblatt basierend auf dem Partei-Typ.
+
+    Das Format ist typischerweise:
+    AUFTRAGGEBER:    Adressnr: 36361
+    Firmenname       Tel1: ...
+    Ansprechpartner  ...
+    Strasse
+    PLZ Ort
+
+    Args:
+        text: Der Gesamttext
+        party_type: 'AUFTRAGGEBER', 'GEGNER', oder 'GEGNERVERTRETER'
+
+    Returns:
+        Dictionary mit Partei-Daten
+    """
+    result = {
+        'name': '',
+        'strasse': '',
+        'plz': '',
+        'ort': '',
+        'telefon': '',
+        'fax': '',
+        'email': '',
+        'mobil': '',
+        'adressnr': ''
+    }
+
+    # Finde die Position des Party-Markers
+    party_markers = {
+        'AUFTRAGGEBER': ['AUFTRAGGEBER:', 'AUFTRAGGEBER'],
+        'GEGNER': ['GEGNER:', '\nGEGNER'],  # GEGNER ohne GEGNERVERTRETER
+        'GEGNERVERTRETER': ['GEGNERVERTRETER:', 'GEGNERVERTRETER']
+    }
+
+    markers = party_markers.get(party_type, [party_type])
+    start_pos = -1
+
+    for marker in markers:
+        pos = text.find(marker)
+        if pos != -1:
+            # Bei GEGNER: sicherstellen dass es nicht GEGNERVERTRETER ist
+            if party_type == 'GEGNER' and text[pos:pos+20].startswith('GEGNERVERTRETER'):
+                continue
+            start_pos = pos
+            break
+
+    if start_pos == -1:
+        return result
+
+    # End-Marker bestimmen (naechste Section)
+    end_markers = ['AUFTRAGGEBER', 'GEGNER', 'GEGNERVERTRETER', 'RECHTSSCHUTZ', 'TERMINE', 'FRISTEN']
+    # Entferne den aktuellen Marker aus End-Markern
+    end_markers = [m for m in end_markers if m != party_type]
+
+    section_end = len(text)
+    for end_marker in end_markers:
+        pos = text.find(end_marker, start_pos + len(party_type))
+        if pos != -1 and pos < section_end:
+            # Bei GEGNER: GEGNERVERTRETER ist ein gueltiger End-Marker
+            section_end = pos
+
+    section = text[start_pos:section_end]
+    print(f"=== {party_type} Section ===")
+    print(section[:300])
+    print("=" * 30)
+
+    # Adressnr extrahieren (wichtig fuer Zuordnung)
+    adressnr_match = re.search(r'Adressnr:?\s*(\d+)', section)
+    if adressnr_match:
+        result['adressnr'] = adressnr_match.group(1)
+
+    # Kontaktdaten extrahieren
+    tel_match = re.search(r'Tel\d?:?\s*([\d\s/\-]+)', section)
+    if tel_match:
+        result['telefon'] = tel_match.group(1).strip()
+
+    mobil_match = re.search(r'Mobil:?\s*([\d\s/\-]+)', section)
+    if mobil_match:
+        result['mobil'] = mobil_match.group(1).strip()
+
+    fax_match = re.search(r'Fax:?\s*([\d\s/\-]+)', section)
+    if fax_match:
+        result['fax'] = fax_match.group(1).strip()
+
+    email_match = re.search(r'E-Mail:?\s*([^\s]+@[^\s]+)', section)
+    if email_match:
+        result['email'] = email_match.group(1).strip()
+
+    # PLZ und Ort finden
+    plz_match = re.search(r'(\d{5})\s+([A-Za-zäöüÄÖÜß\-\s]+?)(?:\n|$)', section)
+    if plz_match:
+        result['plz'] = plz_match.group(1)
+        result['ort'] = plz_match.group(2).strip()
+
+    # Namen extrahieren - suche nach typischen Namensmustern
+    # Firmen: GmbH, mbH, AG, etc.
+    # Personen: Eheleute, Herr, Frau, oder einfach Vor- und Nachname
+
+    name_patterns = [
+        # Firma mit GmbH etc.
+        r'([A-Za-zäöüÄÖÜß\s]+(?:GmbH|mbH|AG|KG|OHG|e\.V\.|Co\.))',
+        # Eheleute
+        r'(Eheleute\s+[A-Za-zäöüÄÖÜß\s]+)',
+        # Herr/Frau
+        r'((?:Herr|Frau)\s+[A-Za-zäöüÄÖÜß\s]+)',
+    ]
+
+    for pattern in name_patterns:
+        name_match = re.search(pattern, section)
+        if name_match:
+            result['name'] = name_match.group(1).strip()
+            break
+
+    # Wenn kein Name gefunden, versuche alternative Methode
+    if not result['name']:
+        # Suche nach Zeilen die wie Namen aussehen (keine Sonderzeichen, keine Zahlen am Anfang)
+        lines = section.split('\n')
+        for line in lines:
+            line = line.strip()
+            # Ueberspringe Zeilen mit Kontaktdaten, Markern, etc.
+            if any(x in line for x in ['Tel', 'Fax', 'Mobil', 'E-Mail', 'Adressnr', ':', '@', 'AUFTRAGGEBER', 'GEGNER', 'geb.']):
+                continue
+            # Ueberspringe Zeilen die nur Zahlen sind
+            if re.match(r'^[\d\s/\-]+$', line):
+                continue
+            # Ueberspringe PLZ-Zeilen
+            if re.match(r'^\d{5}\s', line):
+                continue
+            # Ueberspringe leere Zeilen
+            if not line:
+                continue
+            # Diese Zeile koennte ein Name sein
+            if len(line) > 3 and not line.startswith(('Tel', 'Fax', 'Mobil')):
+                result['name'] = line
+                break
+
+    # Strasse finden (Zeile mit Hausnummer)
+    strasse_match = re.search(r'([A-Za-zäöüÄÖÜß\s\-]+\s+\d+[a-zA-Z]?)\s*\n', section)
+    if strasse_match:
+        result['strasse'] = strasse_match.group(1).strip()
 
     return result
 
