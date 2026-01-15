@@ -8,6 +8,8 @@ Fuer RHM - Radtke, Heigener und Meier Kanzlei, Rendsburg
 import streamlit as st
 from datetime import datetime, date
 import time
+import base64
+import io
 
 from config.settings import settings
 from config.version import get_version, get_version_display, CHANGELOG
@@ -22,6 +24,49 @@ from src.services.import_service import (
     ist_pdfplumber_verfuegbar,
     get_pdf_seitenanzahl
 )
+
+
+def zeige_pdf_viewer(pdf_bytes: bytes, hoehe: int = 600) -> None:
+    """
+    Zeigt ein PDF im Browser an.
+
+    Args:
+        pdf_bytes: PDF als Bytes
+        hoehe: Hoehe des Viewers in Pixel
+    """
+    if pdf_bytes:
+        base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
+        pdf_display = f'''
+            <iframe
+                src="data:application/pdf;base64,{base64_pdf}"
+                width="100%"
+                height="{hoehe}px"
+                type="application/pdf"
+                style="border: 1px solid #ccc; border-radius: 4px;">
+            </iframe>
+        '''
+        st.markdown(pdf_display, unsafe_allow_html=True)
+    else:
+        st.warning("Keine PDF-Daten verfuegbar")
+
+
+def zeige_pdf_download(pdf_bytes: bytes, dateiname: str) -> None:
+    """
+    Zeigt einen Download-Button fuer ein PDF.
+
+    Args:
+        pdf_bytes: PDF als Bytes
+        dateiname: Name der Datei beim Download
+    """
+    if pdf_bytes:
+        st.download_button(
+            label="PDF herunterladen",
+            data=pdf_bytes,
+            file_name=dateiname,
+            mime="application/pdf",
+            use_container_width=True
+        )
+
 
 # Seitenkonfiguration muss zuerst kommen
 st.set_page_config(
@@ -1651,12 +1696,20 @@ def show_lawyer_dashboard():
                                     "az": akte.aktenzeichen,
                                     "mandant": akte.mandant,
                                     "gegner": akte.gegner,
+                                    "gegnervertreter": akte.gegnervertreter,
                                     "typ": akte.typ,
                                     "angelegt": akte.angelegt,
                                     "dokumente": akte.dokument_count,
                                     "dokumente_namen": akte.dokumente,  # Die echten Dokumentnamen aus den Lesezeichen!
                                     "quelle": akte.quelle,
-                                    "status": "erkannt"
+                                    "status": "erkannt",
+                                    # Zusaetzliche Aktenvorblatt-Daten
+                                    "gegenstandswert": akte.gegenstandswert,
+                                    "gericht": akte.gericht,
+                                    "gerichts_az": akte.gerichts_az,
+                                    "mandant_adresse": akte.mandant_adresse,
+                                    "gegner_adresse": akte.gegner_adresse,
+                                    "gegnervertreter_adresse": akte.gegnervertreter_adresse
                                 })
 
                             dokumente_ohne_akte = []
@@ -1667,11 +1720,24 @@ def show_lawyer_dashboard():
                                     "datum": datetime.now().strftime("%d.%m.%Y")
                                 })
 
+                            # Extrahierte Dokumente mit PDF-Bytes aufbereiten
+                            extrahierte_dokumente = []
+                            for dok in import_ergebnis.dokumente:
+                                extrahierte_dokumente.append({
+                                    "name": dok.name,
+                                    "start_seite": dok.start_seite,
+                                    "end_seite": dok.end_seite,
+                                    "seitenanzahl": dok.seitenanzahl,
+                                    "pdf_bytes": dok.pdf_bytes,  # Die echten PDF-Daten!
+                                    "text_vorschau": dok.text_vorschau
+                                })
+
                             st.session_state.import_result = {
                                 "quelle": "RA-MICRO",
                                 "hinweis_demo": False,  # Echte Daten!
                                 "akten": akten_liste,
                                 "dokumente_ohne_akte": dokumente_ohne_akte,
+                                "extrahierte_dokumente": extrahierte_dokumente,  # PDF-Bytes fuer Viewer!
                                 "lesezeichen": import_ergebnis.lesezeichen,
                                 "hinweise": import_ergebnis.hinweise,
                                 "fehler": import_ergebnis.fehler
@@ -1812,18 +1878,34 @@ def show_lawyer_dashboard():
                                         "az": akte["az"],
                                         "mandant": akte["mandant"],
                                         "gegner": akte["gegner"],
+                                        "gegnervertreter": akte.get("gegnervertreter", ""),
                                         "typ": akte["typ"],
                                         "status": "Aktiv",
                                         "angelegt": akte["angelegt"],
                                         "quelle": akte.get("quelle", "RA-MICRO Import"),
                                         # Die echten Dokumentnamen aus dem PDF-Import!
                                         "dokumente_namen": akte.get("dokumente_namen", []),
-                                        "dokument_count": akte.get("dokumente", 0)
+                                        "dokument_count": akte.get("dokumente", 0),
+                                        # Aktenvorblatt-Daten
+                                        "gegenstandswert": akte.get("gegenstandswert", ""),
+                                        "gericht": akte.get("gericht", ""),
+                                        "gerichts_az": akte.get("gerichts_az", ""),
+                                        "mandant_adresse": akte.get("mandant_adresse", {}),
+                                        "gegner_adresse": akte.get("gegner_adresse", {}),
+                                        "gegnervertreter_adresse": akte.get("gegnervertreter_adresse", {})
                                     }
                                     # Pruefen ob Akte bereits existiert
                                     existing_az = [a["az"] for a in st.session_state.akten_liste]
                                     if akte["az"] not in existing_az:
                                         st.session_state.akten_liste.append(neue_akte)
+
+                            # Extrahierte Dokumente mit PDF-Bytes separat speichern (fuer PDF-Viewer)
+                            if result.get("extrahierte_dokumente"):
+                                if "pdf_dokumente" not in st.session_state:
+                                    st.session_state.pdf_dokumente = {}
+                                for dok in result["extrahierte_dokumente"]:
+                                    # Speichern unter Dokumentname als Schluessel
+                                    st.session_state.pdf_dokumente[dok["name"]] = dok
 
                             st.session_state.show_import_result = False
                             st.session_state.import_result = None
@@ -2511,11 +2593,12 @@ def show_cases_list():
     # Zuerst importierte Akten
     for akte in importierte_akten:
         if akte["az"] not in vorhandene_az:
-            # Fehlende Felder ergaenzen - WICHTIG: dokumente_namen muss erhalten bleiben!
+            # Fehlende Felder ergaenzen - WICHTIG: dokumente_namen und Aktenvorblatt-Daten erhalten!
             akte_komplett = {
                 "az": akte.get("az", ""),
                 "mandant": akte.get("mandant", ""),
                 "gegner": akte.get("gegner", ""),
+                "gegnervertreter": akte.get("gegnervertreter", ""),
                 "typ": akte.get("typ", ""),
                 "anwalt": akte.get("anwalt", st.session_state.user.get("nachname", "N/A")),
                 "status": akte.get("status", "Aktiv"),
@@ -2524,7 +2607,14 @@ def show_cases_list():
                 "quelle": akte.get("quelle", "Import"),
                 # Echte Dokumentnamen aus PDF-Import erhalten!
                 "dokumente_namen": akte.get("dokumente_namen", []),
-                "dokument_count": akte.get("dokument_count", 0)
+                "dokument_count": akte.get("dokument_count", 0),
+                # Aktenvorblatt-Daten (Beteiligte mit Adressen)
+                "gegenstandswert": akte.get("gegenstandswert", ""),
+                "gericht": akte.get("gericht", ""),
+                "gerichts_az": akte.get("gerichts_az", ""),
+                "mandant_adresse": akte.get("mandant_adresse", {}),
+                "gegner_adresse": akte.get("gegner_adresse", {}),
+                "gegnervertreter_adresse": akte.get("gegnervertreter_adresse", {})
             }
             akten.append(akte_komplett)
             vorhandene_az.add(akte["az"])
@@ -2729,29 +2819,80 @@ def show_case_detail():
         # Beteiligte PRO AKTE speichern (nicht global)
         beteiligte_key = f"beteiligte_{akte['az']}"
         if beteiligte_key not in st.session_state:
-            # Gegner-Name aus der Akte extrahieren
-            gegner_name = akte.get("gegner", "")
-            gegner_teile = gegner_name.split(" ") if gegner_name else []
-
-            # Fuer importierte Akten: Hinweis dass Daten manuell eingegeben werden muessen
+            # Fuer importierte Akten: Echte Daten aus Aktenvorblatt verwenden
             if akte.get("quelle", "").startswith("RA-MICRO"):
-                st.info("Diese Akte wurde aus RA-MICRO importiert. Bitte ergaenzen Sie die Daten der Beteiligten.")
+                # Aktenvorblatt-Daten verwenden
+                gegner_adresse = akte.get("gegner_adresse", {})
+                mandant_adresse = akte.get("mandant_adresse", {})
+                gv_adresse = akte.get("gegnervertreter_adresse", {})
 
-            st.session_state[beteiligte_key] = {
-                "gegner": {
-                    "vorname": gegner_teile[0] if len(gegner_teile) > 0 else "",
-                    "nachname": gegner_teile[-1] if len(gegner_teile) > 0 else "",
-                    "adresse": "",
-                    "plz": "",
-                    "ort": "",
-                    "telefon": "",
-                    "email": ""
-                },
-                "gegnervertreter": None,
-                "amtsgericht": "",
-                "oberlandesgericht": "",
-                "jugendamt": ""
-            }
+                # Gegner-Name parsen
+                gegner_name = akte.get("gegner", "")
+                gegner_teile = gegner_name.split(" ") if gegner_name else []
+
+                # Gegnervertreter-Name parsen
+                gv_name = akte.get("gegnervertreter", "")
+                gv_teile = gv_name.split(" ") if gv_name else []
+
+                st.success("Beteiligte wurden aus dem RA-MICRO Aktenvorblatt importiert!")
+
+                st.session_state[beteiligte_key] = {
+                    "gegner": {
+                        "vorname": gegner_teile[0] if len(gegner_teile) > 1 else "",
+                        "nachname": gegner_teile[-1] if gegner_teile else gegner_name,
+                        "adresse": gegner_adresse.get("strasse", ""),
+                        "plz": gegner_adresse.get("plz", ""),
+                        "ort": gegner_adresse.get("ort", ""),
+                        "telefon": gegner_adresse.get("telefon", ""),
+                        "email": gegner_adresse.get("email", ""),
+                        "vollname": gegner_name
+                    },
+                    "gegnervertreter": {
+                        "vorname": gv_teile[0] if len(gv_teile) > 1 else "",
+                        "nachname": gv_teile[-1] if gv_teile else gv_name,
+                        "kanzlei": gv_name,
+                        "adresse": gv_adresse.get("strasse", ""),
+                        "plz": gv_adresse.get("plz", ""),
+                        "ort": gv_adresse.get("ort", ""),
+                        "telefon": gv_adresse.get("telefon", ""),
+                        "email": gv_adresse.get("email", "")
+                    } if gv_name else None,
+                    "mandant": {
+                        "name": akte.get("mandant", ""),
+                        "adresse": mandant_adresse.get("strasse", ""),
+                        "plz": mandant_adresse.get("plz", ""),
+                        "ort": mandant_adresse.get("ort", ""),
+                        "telefon": mandant_adresse.get("telefon", ""),
+                        "email": mandant_adresse.get("email", "")
+                    },
+                    "amtsgericht": "",
+                    "oberlandesgericht": "",
+                    "jugendamt": "",
+                    # Zusaetzliche importierte Daten
+                    "gericht_import": akte.get("gericht", ""),
+                    "gerichts_az": akte.get("gerichts_az", ""),
+                    "gegenstandswert": akte.get("gegenstandswert", "")
+                }
+            else:
+                # Demo-Daten fuer nicht-importierte Akten
+                gegner_name = akte.get("gegner", "")
+                gegner_teile = gegner_name.split(" ") if gegner_name else []
+
+                st.session_state[beteiligte_key] = {
+                    "gegner": {
+                        "vorname": gegner_teile[0] if len(gegner_teile) > 0 else "",
+                        "nachname": gegner_teile[-1] if len(gegner_teile) > 0 else "",
+                        "adresse": "",
+                        "plz": "",
+                        "ort": "",
+                        "telefon": "",
+                        "email": ""
+                    },
+                    "gegnervertreter": None,
+                    "amtsgericht": "",
+                    "oberlandesgericht": "",
+                    "jugendamt": ""
+                }
 
         beteiligte = st.session_state[beteiligte_key]
 
@@ -3355,7 +3496,44 @@ def show_case_detail():
                 # Dokument-Detail anzeigen wenn ausgewaehlt
                 if st.session_state.get("view_document") == doc["id"]:
                     with st.expander(f"Dokumentvorschau: {doc['name']}", expanded=True):
-                        st.info("Dokumentvorschau wird hier angezeigt (PDF-Viewer)")
+                        # PDF-Viewer versuchen
+                        pdf_bytes = None
+                        doc_name = doc['name']
+
+                        # Versuche PDF-Bytes aus Session State zu laden
+                        pdf_dokumente = st.session_state.get("pdf_dokumente", {})
+
+                        # Verschiedene Schluessel-Varianten pruefen
+                        if doc_name in pdf_dokumente:
+                            pdf_bytes = pdf_dokumente[doc_name].get("pdf_bytes")
+                        elif doc_name.replace(".pdf", "") in pdf_dokumente:
+                            pdf_bytes = pdf_dokumente[doc_name.replace(".pdf", "")].get("pdf_bytes")
+                        else:
+                            # Suche nach aehnlichem Namen (z.B. mit _)
+                            safe_name = doc_name.replace(" ", "_").replace(".pdf", "") + ".pdf"
+                            if safe_name in pdf_dokumente:
+                                pdf_bytes = pdf_dokumente[safe_name].get("pdf_bytes")
+
+                        if pdf_bytes:
+                            # Echte PDF-Vorschau anzeigen
+                            st.success("PDF-Vorschau verfuegbar")
+                            zeige_pdf_viewer(pdf_bytes, hoehe=500)
+
+                            # Download-Button
+                            zeige_pdf_download(pdf_bytes, doc_name if doc_name.endswith(".pdf") else f"{doc_name}.pdf")
+                        else:
+                            # Fallback-Meldung
+                            st.warning("PDF-Vorschau nicht verfuegbar")
+                            st.info("""
+                            Die PDF-Vorschau ist fuer dieses Dokument nicht verfuegbar.
+
+                            **Moegliche Gruende:**
+                            - Das Dokument wurde vor dem PDF-Viewer-Update importiert
+                            - Die PDF-Daten wurden aus Speichergruenden nicht gespeichert
+
+                            **Loesung:**
+                            Importieren Sie die RA-MICRO Akte erneut, um die PDF-Vorschau zu aktivieren.
+                            """)
 
                         if doc.get("ocr_ergebnis"):
                             st.markdown("#### Extrahierte Daten (OCR)")
