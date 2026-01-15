@@ -2511,7 +2511,7 @@ def show_cases_list():
     # Zuerst importierte Akten
     for akte in importierte_akten:
         if akte["az"] not in vorhandene_az:
-            # Fehlende Felder ergaenzen
+            # Fehlende Felder ergaenzen - WICHTIG: dokumente_namen muss erhalten bleiben!
             akte_komplett = {
                 "az": akte.get("az", ""),
                 "mandant": akte.get("mandant", ""),
@@ -2521,7 +2521,10 @@ def show_cases_list():
                 "status": akte.get("status", "Aktiv"),
                 "angelegt": akte.get("angelegt", ""),
                 "letzte_aktivitaet": akte.get("letzte_aktivitaet", akte.get("angelegt", "")),
-                "quelle": akte.get("quelle", "Import")
+                "quelle": akte.get("quelle", "Import"),
+                # Echte Dokumentnamen aus PDF-Import erhalten!
+                "dokumente_namen": akte.get("dokumente_namen", []),
+                "dokument_count": akte.get("dokument_count", 0)
             }
             akten.append(akte_komplett)
             vorhandene_az.add(akte["az"])
@@ -2723,25 +2726,34 @@ def show_case_detail():
             JUGENDAEMTER
         )
 
-        # Demo-Beteiligte fuer diese Akte
-        if "case_beteiligte" not in st.session_state:
-            st.session_state.case_beteiligte = {
+        # Beteiligte PRO AKTE speichern (nicht global)
+        beteiligte_key = f"beteiligte_{akte['az']}"
+        if beteiligte_key not in st.session_state:
+            # Gegner-Name aus der Akte extrahieren
+            gegner_name = akte.get("gegner", "")
+            gegner_teile = gegner_name.split(" ") if gegner_name else []
+
+            # Fuer importierte Akten: Hinweis dass Daten manuell eingegeben werden muessen
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.info("Diese Akte wurde aus RA-MICRO importiert. Bitte ergaenzen Sie die Daten der Beteiligten.")
+
+            st.session_state[beteiligte_key] = {
                 "gegner": {
-                    "vorname": akte.get("gegner", "").split(" ")[0] if akte.get("gegner") else "",
-                    "nachname": akte.get("gegner", "").split(" ")[-1] if akte.get("gegner") else "",
-                    "adresse": "Musterweg 5",
-                    "plz": "24768",
-                    "ort": "Rendsburg",
+                    "vorname": gegner_teile[0] if len(gegner_teile) > 0 else "",
+                    "nachname": gegner_teile[-1] if len(gegner_teile) > 0 else "",
+                    "adresse": "",
+                    "plz": "",
+                    "ort": "",
                     "telefon": "",
                     "email": ""
                 },
                 "gegnervertreter": None,
-                "amtsgericht": "ag_rendsburg",
-                "oberlandesgericht": "olg_schleswig",
-                "jugendamt": "ja_rendsburg"
+                "amtsgericht": "",
+                "oberlandesgericht": "",
+                "jugendamt": ""
             }
 
-        beteiligte = st.session_state.case_beteiligte
+        beteiligte = st.session_state[beteiligte_key]
 
         # Sub-Tabs fuer verschiedene Beteiligte
         sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
@@ -2781,7 +2793,7 @@ def show_case_detail():
                     g_email = st.text_input("E-Mail", value=gegner.get("email", ""), key="gegner_email")
 
                 if st.button("Gegner speichern", type="primary", key="save_gegner"):
-                    st.session_state.case_beteiligte["gegner"] = {
+                    beteiligte["gegner"] = {
                         "vorname": g_vorname,
                         "nachname": g_nachname,
                         "adresse": g_adresse,
@@ -2830,7 +2842,7 @@ def show_case_detail():
                     gv_aktenzeichen = st.text_input("Deren Aktenzeichen", value=gv.get("aktenzeichen", ""), key="gv_az")
 
                     if st.button("Gegnervertreter speichern", type="primary", key="save_gv"):
-                        st.session_state.case_beteiligte["gegnervertreter"] = {
+                        beteiligte["gegnervertreter"] = {
                             "kanzlei": gv_kanzlei,
                             "anwalt": gv_anwalt,
                             "adresse": gv_adresse,
@@ -2896,7 +2908,7 @@ def show_case_detail():
                     st.write(f"Telefon: {ag['telefon']}")
 
                     if st.button("Amtsgericht uebernehmen", key="uebernehme_ag"):
-                        st.session_state.case_beteiligte["amtsgericht"] = gericht["amtsgericht_id"]
+                        beteiligte["amtsgericht"] = gericht["amtsgericht_id"]
                         st.success("Amtsgericht uebernommen!")
 
                 with col2:
@@ -2906,7 +2918,7 @@ def show_case_detail():
                     st.write(f"Telefon: {olg['telefon']}")
 
                     if st.button("OLG uebernehmen", key="uebernehme_olg"):
-                        st.session_state.case_beteiligte["oberlandesgericht"] = gericht["oberlandesgericht_id"]
+                        beteiligte["oberlandesgericht"] = gericht["oberlandesgericht_id"]
                         st.success("OLG uebernommen!")
 
                 if gericht.get("hinweis"):
@@ -2962,8 +2974,8 @@ def show_case_detail():
                 st.caption(f"Adresse: {selected_olg_data['adresse']}")
 
             if st.button("Gerichte speichern", type="primary", key="save_gerichte"):
-                st.session_state.case_beteiligte["amtsgericht"] = selected_ag_id
-                st.session_state.case_beteiligte["oberlandesgericht"] = selected_olg_id
+                beteiligte["amtsgericht"] = selected_ag_id
+                beteiligte["oberlandesgericht"] = selected_olg_id
                 st.success("Gerichte gespeichert!")
 
         # ---- Jugendamt ----
@@ -2988,7 +3000,7 @@ def show_case_detail():
                     st.write(f"E-Mail: {ja_data['email']}")
 
                 if st.button("Jugendamt uebernehmen", type="primary", key="uebernehme_ja"):
-                    st.session_state.case_beteiligte["jugendamt"] = vorgeschlagenes_ja["jugendamt_id"]
+                    beteiligte["jugendamt"] = vorgeschlagenes_ja["jugendamt_id"]
                     st.success("Jugendamt uebernommen!")
 
             st.markdown("---")
@@ -3016,7 +3028,7 @@ def show_case_detail():
             st.caption(f"Telefon: {selected_ja_data['telefon']}")
 
             if st.button("Jugendamt speichern", type="primary", key="save_ja"):
-                st.session_state.case_beteiligte["jugendamt"] = selected_ja_id
+                beteiligte["jugendamt"] = selected_ja_id
                 st.success("Jugendamt gespeichert!")
 
         # ---- Weitere Beteiligte ----
@@ -3396,78 +3408,57 @@ def show_case_detail():
                 st.markdown("---")
 
     # =====================================================
-    # TAB 2: Berechnungen mit Versionierung
+    # TAB 3: Berechnungen mit Versionierung
     # =====================================================
-    with tab2:
+    with tab3:
         st.subheader("Berechnungen zur Akte")
 
-        # Demo-Berechnungen
-        berechnungen = [
-            {
-                "id": 1,
-                "typ": "Kindesunterhalt",
-                "version": 3,
-                "erstellt": "12.01.2026 14:30",
-                "erstellt_von": "Dr. Mueller",
-                "notiz": "Aktuelle Berechnung mit allen drei Kindern",
-                "ergebnis": {
-                    "gesamt_zahlbetrag": 1245,
-                    "kinder": [
-                        {"name": "Emma", "zahlbetrag": 498},
-                        {"name": "Lukas", "zahlbetrag": 452},
-                        {"name": "Sophie", "zahlbetrag": 295}
-                    ]
-                },
-                "freigegeben": True
-            },
-            {
-                "id": 2,
-                "typ": "Kindesunterhalt",
-                "version": 2,
-                "erstellt": "10.01.2026 16:15",
-                "erstellt_von": "Dr. Mueller",
-                "notiz": "Korrektur: Kindergeld bei Emma vollstaendig angerechnet",
-                "ergebnis": {
-                    "gesamt_zahlbetrag": 1295,
-                    "kinder": [
-                        {"name": "Emma", "zahlbetrag": 548},
-                        {"name": "Lukas", "zahlbetrag": 452},
-                        {"name": "Sophie", "zahlbetrag": 295}
-                    ]
-                },
-                "freigegeben": False
-            },
-            {
-                "id": 3,
-                "typ": "Kindesunterhalt",
-                "version": 1,
-                "erstellt": "08.01.2026 11:00",
-                "erstellt_von": "Dr. Mueller",
-                "notiz": "Erstberechnung basierend auf Gehaltsabrechnungen",
-                "ergebnis": {
-                    "gesamt_zahlbetrag": 1320,
-                    "kinder": [
-                        {"name": "Emma", "zahlbetrag": 573},
-                        {"name": "Lukas", "zahlbetrag": 452},
-                        {"name": "Sophie", "zahlbetrag": 295}
-                    ]
-                },
-                "freigegeben": False
-            },
-            {
-                "id": 4,
-                "typ": "Trennungsunterhalt",
-                "version": 1,
-                "erstellt": "09.01.2026 09:30",
-                "erstellt_von": "Dr. Mueller",
-                "notiz": "Vorlaefige Berechnung, Einkommen Gegenseite geschaetzt",
-                "ergebnis": {
-                    "zahlbetrag": 687,
-                    "bedarf": 1540
-                },
-                "freigegeben": False
-            },
-        ]
+        # Berechnungen PRO AKTE speichern
+        berechnungen_key = f"berechnungen_{akte['az']}"
+        if berechnungen_key not in st.session_state:
+            # Fuer importierte Akten: Leere Liste
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.session_state[berechnungen_key] = []
+            else:
+                # Demo-Berechnungen nur fuer Demo-Akten
+                st.session_state[berechnungen_key] = [
+                    {
+                        "id": 1,
+                        "typ": "Kindesunterhalt",
+                        "version": 3,
+                        "erstellt": "12.01.2026 14:30",
+                        "erstellt_von": "Dr. Mueller",
+                        "notiz": "Aktuelle Berechnung mit allen drei Kindern",
+                        "ergebnis": {
+                            "gesamt_zahlbetrag": 1245,
+                            "kinder": [
+                                {"name": "Emma", "zahlbetrag": 498},
+                                {"name": "Lukas", "zahlbetrag": 452},
+                                {"name": "Sophie", "zahlbetrag": 295}
+                            ]
+                        },
+                        "freigegeben": True
+                    },
+                    {
+                        "id": 2,
+                        "typ": "Trennungsunterhalt",
+                        "version": 1,
+                        "erstellt": "09.01.2026 09:30",
+                        "erstellt_von": "Dr. Mueller",
+                        "notiz": "Vorlaefige Berechnung, Einkommen Gegenseite geschaetzt",
+                        "ergebnis": {
+                            "zahlbetrag": 687,
+                            "bedarf": 1540
+                        },
+                        "freigegeben": False
+                    },
+                ]
+
+        berechnungen = st.session_state[berechnungen_key]
+
+        # Hinweis fuer importierte Akten ohne Berechnungen
+        if not berechnungen and akte.get("quelle", "").startswith("RA-MICRO"):
+            st.info("Diese Akte wurde aus RA-MICRO importiert. Erstellen Sie Berechnungen mit den untenstehenden Optionen.")
 
         # Neue Berechnung erstellen
         with st.expander("Neue Berechnung erstellen", expanded=False):
@@ -3582,153 +3573,148 @@ def show_case_detail():
     with tab4:
         st.subheader("Gehaltsabrechnungen (OCR-Auswertung)")
 
-        # OCR-ausgewertete Gehaltsabrechnungen
-        gehaltsabrechnungen = [
-            {
-                "id": 1,
-                "monat": "Dezember 2025",
-                "datei": "Gehaltsabrechnung_Dez_2025.pdf",
-                "person": "Mandant (Max Mustermann)",
-                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
-                "brutto": 4850.00,
-                "netto": 3125.50,
-                "steuerklasse": "III",
-                "lohnsteuer": 523.40,
-                "sozialabgaben": 987.60,
-                "kindergeld": 0,
-                "sonderzahlung": 0,
-                "ocr_konfidenz": 0.95,
-                "in_berechnung": True
-            },
-            {
-                "id": 2,
-                "monat": "November 2025",
-                "datei": "Gehaltsabrechnung_Nov_2025.pdf",
-                "person": "Mandant (Max Mustermann)",
-                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
-                "brutto": 4850.00,
-                "netto": 3125.50,
-                "steuerklasse": "III",
-                "lohnsteuer": 523.40,
-                "sozialabgaben": 987.60,
-                "kindergeld": 0,
-                "sonderzahlung": 0,
-                "ocr_konfidenz": 0.94,
-                "in_berechnung": True
-            },
-            {
-                "id": 3,
-                "monat": "Oktober 2025",
-                "datei": "Gehaltsabrechnung_Okt_2025.pdf",
-                "person": "Mandant (Max Mustermann)",
-                "arbeitgeber": "Stadtwerke Rendsburg GmbH",
-                "brutto": 4850.00,
-                "netto": 3125.50,
-                "steuerklasse": "III",
-                "lohnsteuer": 523.40,
-                "sozialabgaben": 987.60,
-                "kindergeld": 0,
-                "sonderzahlung": 0,
-                "ocr_konfidenz": 0.92,
-                "in_berechnung": False
-            },
-        ]
+        # Gehaltsabrechnungen PRO AKTE speichern
+        gehalt_key = f"gehaltsabrechnungen_{akte['az']}"
+        if gehalt_key not in st.session_state:
+            # Fuer importierte Akten: Leere Liste
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.session_state[gehalt_key] = []
+            else:
+                # Demo-Daten nur fuer Demo-Akten
+                st.session_state[gehalt_key] = [
+                    {
+                        "id": 1,
+                        "monat": "Dezember 2025",
+                        "datei": "Gehaltsabrechnung_Dez_2025.pdf",
+                        "person": f"Mandant ({akte.get('mandant', 'Unbekannt')})",
+                        "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                        "brutto": 4850.00,
+                        "netto": 3125.50,
+                        "steuerklasse": "III",
+                        "lohnsteuer": 523.40,
+                        "sozialabgaben": 987.60,
+                        "ocr_konfidenz": 0.95,
+                        "in_berechnung": True
+                    },
+                    {
+                        "id": 2,
+                        "monat": "November 2025",
+                        "datei": "Gehaltsabrechnung_Nov_2025.pdf",
+                        "person": f"Mandant ({akte.get('mandant', 'Unbekannt')})",
+                        "arbeitgeber": "Stadtwerke Rendsburg GmbH",
+                        "brutto": 4850.00,
+                        "netto": 3125.50,
+                        "steuerklasse": "III",
+                        "lohnsteuer": 523.40,
+                        "sozialabgaben": 987.60,
+                        "ocr_konfidenz": 0.94,
+                        "in_berechnung": True
+                    },
+                ]
 
-        # Zusammenfassung
-        st.markdown("#### Einkommensuebersicht")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            avg_brutto = sum(g["brutto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
-            st.metric("⌀ Brutto", f"{avg_brutto:,.2f} EUR")
-        with col2:
-            avg_netto = sum(g["netto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
-            st.metric("⌀ Netto", f"{avg_netto:,.2f} EUR")
-        with col3:
-            st.metric("Anzahl Monate", len(gehaltsabrechnungen))
-        with col4:
-            in_calc = len([g for g in gehaltsabrechnungen if g["in_berechnung"]])
-            st.metric("In Berechnung", f"{in_calc}/{len(gehaltsabrechnungen)}")
+        gehaltsabrechnungen = st.session_state[gehalt_key]
 
-        st.markdown("---")
+        # Hinweis fuer importierte Akten
+        if not gehaltsabrechnungen:
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.info("Diese Akte wurde aus RA-MICRO importiert. Laden Sie Gehaltsabrechnungen im Tab 'Dokumente' hoch, um OCR-Auswertung zu starten.")
+            st.warning("Keine Gehaltsabrechnungen vorhanden.")
+        else:
+            # Zusammenfassung
+            st.markdown("#### Einkommensuebersicht")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                avg_brutto = sum(g["brutto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
+                st.metric("⌀ Brutto", f"{avg_brutto:,.2f} EUR")
+            with col2:
+                avg_netto = sum(g["netto"] for g in gehaltsabrechnungen) / len(gehaltsabrechnungen)
+                st.metric("⌀ Netto", f"{avg_netto:,.2f} EUR")
+            with col3:
+                st.metric("Anzahl Monate", len(gehaltsabrechnungen))
+            with col4:
+                in_calc = len([g for g in gehaltsabrechnungen if g["in_berechnung"]])
+                st.metric("In Berechnung", f"{in_calc}/{len(gehaltsabrechnungen)}")
 
-        # Detailliste
-        st.markdown("#### Einzelne Gehaltsabrechnungen")
+            st.markdown("---")
 
-        for ga in gehaltsabrechnungen:
-            with st.container():
-                col1, col2, col3 = st.columns([2, 2.5, 1.5])
+            # Detailliste
+            st.markdown("#### Einzelne Gehaltsabrechnungen")
 
-                with col1:
-                    konfidenz_pct = int(ga["ocr_konfidenz"] * 100)
-                    st.markdown(f"**{ga['monat']}**")
-                    st.caption(f"OCR-Konfidenz: {konfidenz_pct}%")
-                    st.caption(f"Datei: {ga['datei']}")
+            for ga in gehaltsabrechnungen:
+                with st.container():
+                    col1, col2, col3 = st.columns([2, 2.5, 1.5])
 
-                with col2:
-                    st.write(f"**Brutto:** {ga['brutto']:,.2f} EUR | **Netto:** {ga['netto']:,.2f} EUR")
-                    st.caption(f"Steuerklasse {ga['steuerklasse']} | LSt: {ga['lohnsteuer']:.2f} EUR | Sozialabg.: {ga['sozialabgaben']:.2f} EUR")
-                    st.caption(f"Arbeitgeber: {ga['arbeitgeber']}")
+                    with col1:
+                        konfidenz_pct = int(ga["ocr_konfidenz"] * 100)
+                        st.markdown(f"**{ga['monat']}**")
+                        st.caption(f"OCR-Konfidenz: {konfidenz_pct}%")
+                        st.caption(f"Datei: {ga['datei']}")
 
-                with col3:
-                    # Checkbox fuer Berechnung
-                    in_calc = st.checkbox(
-                        "In Berechnung",
-                        value=ga["in_berechnung"],
-                        key=f"ga_calc_{ga['id']}"
-                    )
+                    with col2:
+                        st.write(f"**Brutto:** {ga['brutto']:,.2f} EUR | **Netto:** {ga['netto']:,.2f} EUR")
+                        st.caption(f"Steuerklasse {ga['steuerklasse']} | LSt: {ga['lohnsteuer']:.2f} EUR | Sozialabg.: {ga['sozialabgaben']:.2f} EUR")
+                        st.caption(f"Arbeitgeber: {ga['arbeitgeber']}")
 
-                    if st.button("Korrigieren", key=f"ga_edit_{ga['id']}", use_container_width=True):
-                        st.session_state.edit_ga = ga["id"]
+                    with col3:
+                        # Checkbox fuer Berechnung
+                        in_calc = st.checkbox(
+                            "In Berechnung",
+                            value=ga["in_berechnung"],
+                            key=f"ga_calc_{ga['id']}"
+                        )
 
-                # Korrekturformular
-                if st.session_state.get("edit_ga") == ga["id"]:
-                    with st.expander("Werte korrigieren", expanded=True):
-                        st.warning("Die OCR-Erkennung kann Fehler enthalten. Bitte pruefen und korrigieren Sie die Werte.")
+                        if st.button("Korrigieren", key=f"ga_edit_{ga['id']}", use_container_width=True):
+                            st.session_state.edit_ga = ga["id"]
 
-                        edit_col1, edit_col2 = st.columns(2)
-                        with edit_col1:
-                            new_brutto = st.number_input(
-                                "Brutto",
-                                value=ga["brutto"],
-                                step=10.0,
-                                key=f"edit_brutto_{ga['id']}"
-                            )
-                            new_netto = st.number_input(
-                                "Netto",
-                                value=ga["netto"],
-                                step=10.0,
-                                key=f"edit_netto_{ga['id']}"
-                            )
-                        with edit_col2:
-                            new_stk = st.selectbox(
-                                "Steuerklasse",
-                                ["I", "II", "III", "IV", "V", "VI"],
-                                index=["I", "II", "III", "IV", "V", "VI"].index(ga["steuerklasse"]),
-                                key=f"edit_stk_{ga['id']}"
-                            )
-                            new_ag = st.text_input(
-                                "Arbeitgeber",
-                                value=ga["arbeitgeber"],
-                                key=f"edit_ag_{ga['id']}"
-                            )
+                    # Korrekturformular
+                    if st.session_state.get("edit_ga") == ga["id"]:
+                        with st.expander("Werte korrigieren", expanded=True):
+                            st.warning("Die OCR-Erkennung kann Fehler enthalten. Bitte pruefen und korrigieren Sie die Werte.")
 
-                        btn_col1, btn_col2 = st.columns(2)
-                        with btn_col1:
-                            if st.button("Speichern", type="primary", key=f"save_ga_{ga['id']}"):
-                                st.success("Werte wurden korrigiert und gespeichert!")
-                                st.session_state.edit_ga = None
-                                st.rerun()
-                        with btn_col2:
-                            if st.button("Abbrechen", key=f"cancel_ga_{ga['id']}"):
-                                st.session_state.edit_ga = None
-                                st.rerun()
+                            edit_col1, edit_col2 = st.columns(2)
+                            with edit_col1:
+                                new_brutto = st.number_input(
+                                    "Brutto",
+                                    value=ga["brutto"],
+                                    step=10.0,
+                                    key=f"edit_brutto_{ga['id']}"
+                                )
+                                new_netto = st.number_input(
+                                    "Netto",
+                                    value=ga["netto"],
+                                    step=10.0,
+                                    key=f"edit_netto_{ga['id']}"
+                                )
+                            with edit_col2:
+                                new_stk = st.selectbox(
+                                    "Steuerklasse",
+                                    ["I", "II", "III", "IV", "V", "VI"],
+                                    index=["I", "II", "III", "IV", "V", "VI"].index(ga["steuerklasse"]),
+                                    key=f"edit_stk_{ga['id']}"
+                                )
+                                new_ag = st.text_input(
+                                    "Arbeitgeber",
+                                    value=ga["arbeitgeber"],
+                                    key=f"edit_ag_{ga['id']}"
+                                )
 
-                st.markdown("---")
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                if st.button("Speichern", type="primary", key=f"save_ga_{ga['id']}"):
+                                    st.success("Werte wurden korrigiert und gespeichert!")
+                                    st.session_state.edit_ga = None
+                                    st.rerun()
+                            with btn_col2:
+                                if st.button("Abbrechen", key=f"cancel_ga_{ga['id']}"):
+                                    st.session_state.edit_ga = None
+                                    st.rerun()
 
-        # Import in Berechnung
-        st.markdown("#### In Berechnung uebernehmen")
-        if st.button("Markierte Gehaltsabrechnungen in neue Berechnung uebernehmen", type="primary"):
-            st.success("Daten wurden fuer die Berechnung vorbereitet. Bitte wechseln Sie zum Tab 'Berechnungen'.")
+                    st.markdown("---")
+
+            # Import in Berechnung
+            st.markdown("#### In Berechnung uebernehmen")
+            if st.button("Markierte Gehaltsabrechnungen in neue Berechnung uebernehmen", type="primary"):
+                st.success("Daten wurden fuer die Berechnung vorbereitet. Bitte wechseln Sie zum Tab 'Berechnungen'.")
 
     # =====================================================
     # TAB 5: Schriftsaetze zur Akte
@@ -3736,45 +3722,59 @@ def show_case_detail():
     with tab5:
         st.subheader("Schriftsaetze zur Akte")
 
-        # Demo-Schriftsaetze
-        schriftsaetze = [
-            {
-                "id": 1,
-                "titel": "Scheidungsantrag",
-                "status": "versendet",
-                "erstellt": "06.01.2026",
-                "versendet": "07.01.2026",
-                "empfaenger": "AG Rendsburg"
-            },
-            {
-                "id": 2,
-                "titel": "Unterhaltsantrag (Kindesunterhalt)",
-                "status": "entwurf",
-                "erstellt": "12.01.2026",
-                "versendet": None,
-                "empfaenger": "AG Rendsburg"
-            },
-        ]
+        # Schriftsaetze PRO AKTE speichern
+        schrift_key = f"schriftsaetze_{akte['az']}"
+        if schrift_key not in st.session_state:
+            # Fuer importierte Akten: Leere Liste
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.session_state[schrift_key] = []
+            else:
+                # Demo-Daten nur fuer Demo-Akten
+                st.session_state[schrift_key] = [
+                    {
+                        "id": 1,
+                        "titel": "Scheidungsantrag",
+                        "status": "versendet",
+                        "erstellt": "06.01.2026",
+                        "versendet": "07.01.2026",
+                        "empfaenger": "AG Rendsburg"
+                    },
+                    {
+                        "id": 2,
+                        "titel": "Unterhaltsantrag (Kindesunterhalt)",
+                        "status": "entwurf",
+                        "erstellt": "12.01.2026",
+                        "versendet": None,
+                        "empfaenger": "AG Rendsburg"
+                    },
+                ]
 
-        for ss in schriftsaetze:
-            col1, col2, col3 = st.columns([3, 1.5, 1.5])
+        schriftsaetze = st.session_state[schrift_key]
 
-            with col1:
-                st.markdown(f"**{ss['titel']}**")
-                st.caption(f"Empfaenger: {ss['empfaenger']}")
+        if not schriftsaetze:
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                st.info("Diese Akte wurde aus RA-MICRO importiert. Erstellen Sie neue Schriftsaetze ueber den Button unten.")
+            st.warning("Keine Schriftsaetze vorhanden.")
+        else:
+            for ss in schriftsaetze:
+                col1, col2, col3 = st.columns([3, 1.5, 1.5])
 
-            with col2:
-                if ss["status"] == "versendet":
-                    st.success(f"Versendet: {ss['versendet']}")
-                else:
-                    st.warning("Entwurf")
-                st.caption(f"Erstellt: {ss['erstellt']}")
+                with col1:
+                    st.markdown(f"**{ss['titel']}**")
+                    st.caption(f"Empfaenger: {ss['empfaenger']}")
 
-            with col3:
-                if st.button("Oeffnen", key=f"ss_{ss['id']}", use_container_width=True):
-                    st.info("Schriftsatz wird geoeffnet...")
+                with col2:
+                    if ss["status"] == "versendet":
+                        st.success(f"Versendet: {ss['versendet']}")
+                    else:
+                        st.warning("Entwurf")
+                    st.caption(f"Erstellt: {ss['erstellt']}")
 
-            st.markdown("---")
+                with col3:
+                    if st.button("Oeffnen", key=f"ss_{ss['id']}", use_container_width=True):
+                        st.info("Schriftsatz wird geoeffnet...")
+
+                st.markdown("---")
 
         if st.button("Neuen Schriftsatz erstellen"):
             st.session_state.current_page = "Schriftsaetze"
@@ -3786,52 +3786,50 @@ def show_case_detail():
     with tab6:
         st.subheader("Aktenhistorie")
 
-        # Demo-Historie
-        historie = [
-            {"datum": "12.01.2026 14:30", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
-             "details": "Kindesunterhalt v3 erstellt"},
-            {"datum": "11.01.2026 11:00", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Kontoauszug_Gemeinschaftskonto.pdf"},
-            {"datum": "10.01.2026 16:15", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
-             "details": "Kindesunterhalt v2 erstellt"},
-            {"datum": "10.01.2026 14:20", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Mietvertrag_Ehewohnung.pdf"},
-            {"datum": "09.01.2026 09:30", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
-             "details": "Trennungsunterhalt v1 erstellt"},
-            {"datum": "08.01.2026 11:00", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
-             "details": "Kindesunterhalt v1 erstellt"},
-            {"datum": "08.01.2026 09:16", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Gehaltsabrechnung_Nov_2025.pdf (OCR ausgefuehrt)"},
-            {"datum": "08.01.2026 09:15", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Gehaltsabrechnung_Dez_2025.pdf (OCR ausgefuehrt)"},
-            {"datum": "07.01.2026 10:00", "aktion": "Schriftsatz versendet", "benutzer": "Dr. Mueller",
-             "details": "Scheidungsantrag an AG Rendsburg"},
-            {"datum": "06.01.2026 14:05", "aktion": "Dokument geprueft", "benutzer": "Dr. Mueller",
-             "details": "Heiratsurkunde.pdf als 'In Ordnung' markiert"},
-            {"datum": "06.01.2026 14:00", "aktion": "Dokument geprueft", "benutzer": "Dr. Mueller",
-             "details": "Personalausweis_Mustermann.pdf als 'In Ordnung' markiert"},
-            {"datum": "05.01.2026 10:32", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Heiratsurkunde.pdf"},
-            {"datum": "05.01.2026 10:30", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
-             "details": "Personalausweis_Mustermann.pdf"},
-            {"datum": "02.01.2026 09:00", "aktion": "Akte angelegt", "benutzer": "Dr. Mueller",
-             "details": f"Akte {akte['az']} fuer {akte['mandant']} angelegt"},
-        ]
+        # Historie PRO AKTE speichern
+        historie_key = f"historie_{akte['az']}"
+        if historie_key not in st.session_state:
+            # Fuer importierte Akten: Nur Import-Eintrag
+            if akte.get("quelle", "").startswith("RA-MICRO"):
+                doc_count = akte.get("dokument_count", len(akte.get("dokumente_namen", [])))
+                st.session_state[historie_key] = [
+                    {"datum": akte.get("angelegt", datetime.now().strftime("%d.%m.%Y")),
+                     "aktion": "Akte importiert",
+                     "benutzer": st.session_state.user.get("nachname", "System"),
+                     "details": f"Akte aus RA-MICRO importiert mit {doc_count} Dokumenten"},
+                ]
+            else:
+                # Demo-Historie fuer Demo-Akten
+                st.session_state[historie_key] = [
+                    {"datum": "12.01.2026 14:30", "aktion": "Berechnung erstellt", "benutzer": "Dr. Mueller",
+                     "details": "Kindesunterhalt v3 erstellt"},
+                    {"datum": "11.01.2026 11:00", "aktion": "Dokument hochgeladen", "benutzer": "Mandant",
+                     "details": "Kontoauszug_Gemeinschaftskonto.pdf"},
+                    {"datum": "07.01.2026 10:00", "aktion": "Schriftsatz versendet", "benutzer": "Dr. Mueller",
+                     "details": "Scheidungsantrag an AG Rendsburg"},
+                    {"datum": "02.01.2026 09:00", "aktion": "Akte angelegt", "benutzer": "Dr. Mueller",
+                     "details": f"Akte {akte['az']} fuer {akte['mandant']} angelegt"},
+                ]
 
-        for eintrag in historie:
-            col1, col2, col3 = st.columns([1.5, 1.5, 4])
+        historie = st.session_state[historie_key]
 
-            with col1:
-                st.caption(eintrag["datum"])
+        if not historie:
+            st.info("Keine Historieneintraege vorhanden.")
+        else:
+            for eintrag in historie:
+                col1, col2, col3 = st.columns([1.5, 1.5, 4])
 
-            with col2:
-                st.write(eintrag["benutzer"])
+                with col1:
+                    st.caption(eintrag["datum"])
 
-            with col3:
-                st.markdown(f"**{eintrag['aktion']}**")
-                st.caption(eintrag["details"])
+                with col2:
+                    st.write(eintrag["benutzer"])
 
-            st.markdown("---")
+                with col3:
+                    st.markdown(f"**{eintrag['aktion']}**")
+                    st.caption(eintrag["details"])
+
+                st.markdown("---")
 
 
 def show_new_case():
