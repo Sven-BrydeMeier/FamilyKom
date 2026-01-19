@@ -1835,12 +1835,118 @@ def show_lawyer_dashboard():
                                 else:
                                     st.info("Bereit")
 
+                        # Extrahierte Aktenvorblatt-Daten anzeigen
+                        with st.expander("Extrahierte Daten aus Aktenvorblatt", expanded=True):
+                            # Pruefung ob Daten aus Aktenvorblatt stammen
+                            hat_aktenvorblatt_daten = bool(
+                                akte.get("mandant_adresse", {}).get("name") or
+                                akte.get("gegner_adresse", {}).get("name") or
+                                akte.get("gericht")
+                            )
+
+                            if hat_aktenvorblatt_daten:
+                                st.success("Aktenvorblatt wurde erfolgreich ausgewertet!")
+                            else:
+                                st.warning("Aktenvorblatt konnte nicht vollstaendig ausgewertet werden. Bitte pruefen Sie die Daten.")
+
+                            detail_col1, detail_col2 = st.columns(2)
+
+                            with detail_col1:
+                                st.markdown("**Mandant (Auftraggeber):**")
+                                mandant_adr = akte.get("mandant_adresse", {})
+                                mandant_name = akte.get('mandant', '-')
+                                # Zeige den Namen aus der Adresse wenn vorhanden (dort steht der vollstaendige Name)
+                                if mandant_adr.get("name"):
+                                    mandant_name = mandant_adr.get("name")
+                                st.write(f"Name: {mandant_name}")
+                                if mandant_adr.get("strasse"):
+                                    st.write(f"Adresse: {mandant_adr.get('strasse', '')}")
+                                if mandant_adr.get("plz") or mandant_adr.get("ort"):
+                                    st.write(f"{mandant_adr.get('plz', '')} {mandant_adr.get('ort', '')}")
+                                if mandant_adr.get("telefon"):
+                                    st.write(f"Tel: {mandant_adr.get('telefon', '')}")
+                                if mandant_adr.get("email"):
+                                    st.write(f"E-Mail: {mandant_adr.get('email', '')}")
+                                if mandant_adr.get("adressnr"):
+                                    st.caption(f"Adressnr: {mandant_adr.get('adressnr')}")
+
+                                st.markdown("---")
+                                st.markdown("**Gegner:**")
+                                gegner_adr = akte.get("gegner_adresse", {})
+                                gegner_name = akte.get('gegner', '-')
+                                # Zeige den Namen aus der Adresse wenn vorhanden
+                                if gegner_adr.get("name"):
+                                    gegner_name = gegner_adr.get("name")
+                                st.write(f"Name: {gegner_name}")
+                                if gegner_adr.get("strasse"):
+                                    st.write(f"Adresse: {gegner_adr.get('strasse', '')}")
+                                if gegner_adr.get("plz") or gegner_adr.get("ort"):
+                                    st.write(f"{gegner_adr.get('plz', '')} {gegner_adr.get('ort', '')}")
+                                if gegner_adr.get("telefon"):
+                                    st.write(f"Tel: {gegner_adr.get('telefon', '')}")
+                                if gegner_adr.get("adressnr"):
+                                    st.caption(f"Adressnr: {gegner_adr.get('adressnr')}")
+
+                            with detail_col2:
+                                st.markdown("**Gegnervertreter:**")
+                                gv_name = akte.get("gegnervertreter", "")
+                                gv_adr = akte.get("gegnervertreter_adresse", {})
+                                # Name aus Adresse wenn vorhanden
+                                if gv_adr.get("name"):
+                                    gv_name = gv_adr.get("name")
+
+                                if gv_name:
+                                    st.write(f"Name: {gv_name}")
+                                    if gv_adr.get("strasse"):
+                                        st.write(f"Adresse: {gv_adr.get('strasse', '')}")
+                                    if gv_adr.get("plz") or gv_adr.get("ort"):
+                                        st.write(f"{gv_adr.get('plz', '')} {gv_adr.get('ort', '')}")
+                                    if gv_adr.get("adressnr"):
+                                        st.caption(f"Adressnr: {gv_adr.get('adressnr')}")
+                                else:
+                                    st.info("Nicht anwaltlich vertreten")
+
+                                st.markdown("---")
+                                st.markdown("**Verfahrensdaten:**")
+                                if akte.get("gericht"):
+                                    st.write(f"Gericht: {akte.get('gericht', '-')}")
+                                if akte.get("gerichts_az"):
+                                    st.write(f"Gerichts-Az: {akte.get('gerichts_az', '-')}")
+                                if akte.get("gegenstandswert"):
+                                    st.write(f"Streitwert: {akte.get('gegenstandswert', '-')} EUR")
+
                         # Echte Dokumentnamen aus den PDF-Lesezeichen anzeigen
                         dokumente_namen = akte.get("dokumente_namen", [])
                         if dokumente_namen:
-                            with st.expander(f"Dokumente aus PDF anzeigen ({len(dokumente_namen)} Stueck)"):
+                            with st.expander(f"Dokumente aus PDF ({len(dokumente_namen)} Stueck)"):
+                                # Dokumente kategorisieren
+                                kategorien = {
+                                    "Aktenvorblatt": [],
+                                    "Schriftsaetze": [],
+                                    "Einkommensnachweise": [],
+                                    "Gerichtliche Dokumente": [],
+                                    "Sonstige": []
+                                }
+
                                 for doc_name in dokumente_namen:
-                                    st.write(f"- {doc_name}")
+                                    doc_lower = doc_name.lower()
+                                    if "aktenvorblatt" in doc_lower or "deckblatt" in doc_lower:
+                                        kategorien["Aktenvorblatt"].append(doc_name)
+                                    elif any(x in doc_lower for x in ["schriftsatz", "antrag", "klage", "erwiderung", "replik"]):
+                                        kategorien["Schriftsaetze"].append(doc_name)
+                                    elif any(x in doc_lower for x in ["gehalt", "lohn", "verdienst", "einkommen", "steuer"]):
+                                        kategorien["Einkommensnachweise"].append(doc_name)
+                                    elif any(x in doc_lower for x in ["beschluss", "urteil", "verfuegung", "protokoll", "ladung"]):
+                                        kategorien["Gerichtliche Dokumente"].append(doc_name)
+                                    else:
+                                        kategorien["Sonstige"].append(doc_name)
+
+                                for kat_name, docs in kategorien.items():
+                                    if docs:
+                                        st.markdown(f"**{kat_name}:** ({len(docs)})")
+                                        for doc in docs:
+                                            st.write(f"  - {doc}")
+
                         st.markdown("---")
 
                     # Dokumente ohne Akte
@@ -1875,11 +1981,20 @@ def show_lawyer_dashboard():
                                 aktion = st.session_state.get(aktion_key, "Neue Akte anlegen")
 
                                 if aktion == "Neue Akte anlegen":
+                                    # Namen aus Adressdaten verwenden (dort stehen die vollstaendigen Namen)
+                                    mandant_adr = akte.get("mandant_adresse", {})
+                                    gegner_adr = akte.get("gegner_adresse", {})
+                                    gv_adr = akte.get("gegnervertreter_adresse", {})
+
+                                    mandant_name = mandant_adr.get("name", "") or akte["mandant"]
+                                    gegner_name = gegner_adr.get("name", "") or akte["gegner"]
+                                    gv_name = gv_adr.get("name", "") or akte.get("gegnervertreter", "")
+
                                     neue_akte = {
                                         "az": akte["az"],
-                                        "mandant": akte["mandant"],
-                                        "gegner": akte["gegner"],
-                                        "gegnervertreter": akte.get("gegnervertreter", ""),
+                                        "mandant": mandant_name,
+                                        "gegner": gegner_name,
+                                        "gegnervertreter": gv_name,
                                         "typ": akte["typ"],
                                         "status": "Aktiv",
                                         "angelegt": akte["angelegt"],
@@ -1891,9 +2006,9 @@ def show_lawyer_dashboard():
                                         "gegenstandswert": akte.get("gegenstandswert", ""),
                                         "gericht": akte.get("gericht", ""),
                                         "gerichts_az": akte.get("gerichts_az", ""),
-                                        "mandant_adresse": akte.get("mandant_adresse", {}),
-                                        "gegner_adresse": akte.get("gegner_adresse", {}),
-                                        "gegnervertreter_adresse": akte.get("gegnervertreter_adresse", {})
+                                        "mandant_adresse": mandant_adr,
+                                        "gegner_adresse": gegner_adr,
+                                        "gegnervertreter_adresse": gv_adr
                                     }
                                     # Pruefen ob Akte bereits existiert
                                     existing_az = [a["az"] for a in st.session_state.akten_liste]
@@ -2830,20 +2945,30 @@ def show_case_detail():
                 mandant_adresse = akte.get("mandant_adresse", {})
                 gv_adresse = akte.get("gegnervertreter_adresse", {})
 
-                # Gegner-Name parsen
-                gegner_name = akte.get("gegner", "")
-                gegner_teile = gegner_name.split(" ") if gegner_name else []
+                # Gegner-Name: Zuerst aus Adresse (dort steht der vollstaendige Name), dann Fallback
+                gegner_name = gegner_adresse.get("name", "") or akte.get("gegner", "")
+                # Fuer Eheleute/Familien: Nur Nachname extrahieren
+                if gegner_name.startswith("Eheleute "):
+                    gegner_nachname = gegner_name.replace("Eheleute ", "").strip()
+                    gegner_vorname = "Eheleute"
+                else:
+                    gegner_teile = gegner_name.split(" ") if gegner_name else []
+                    gegner_vorname = gegner_teile[0] if len(gegner_teile) > 1 else ""
+                    gegner_nachname = gegner_teile[-1] if gegner_teile else gegner_name
 
-                # Gegnervertreter-Name parsen
-                gv_name = akte.get("gegnervertreter", "")
+                # Gegnervertreter-Name: Zuerst aus Adresse, dann Fallback
+                gv_name = gv_adresse.get("name", "") or akte.get("gegnervertreter", "")
                 gv_teile = gv_name.split(" ") if gv_name else []
+
+                # Mandant-Name: Zuerst aus Adresse (vollstaendiger Firmenname), dann Fallback
+                mandant_name = mandant_adresse.get("name", "") or akte.get("mandant", "")
 
                 st.success("Beteiligte wurden aus dem RA-MICRO Aktenvorblatt importiert!")
 
                 st.session_state[beteiligte_key] = {
                     "gegner": {
-                        "vorname": gegner_teile[0] if len(gegner_teile) > 1 else "",
-                        "nachname": gegner_teile[-1] if gegner_teile else gegner_name,
+                        "vorname": gegner_vorname,
+                        "nachname": gegner_nachname,
                         "adresse": gegner_adresse.get("strasse", ""),
                         "plz": gegner_adresse.get("plz", ""),
                         "ort": gegner_adresse.get("ort", ""),
@@ -2862,7 +2987,7 @@ def show_case_detail():
                         "email": gv_adresse.get("email", "")
                     } if gv_name else None,
                     "mandant": {
-                        "name": akte.get("mandant", ""),
+                        "name": mandant_name,
                         "adresse": mandant_adresse.get("strasse", ""),
                         "plz": mandant_adresse.get("plz", ""),
                         "ort": mandant_adresse.get("ort", ""),
